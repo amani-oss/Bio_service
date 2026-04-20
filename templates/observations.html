@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% block title %}Observations{% endblock %}
+{% block page_title %}Observations{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .search-bar {
+    flex: 1; min-width: 200px;
+    background: var(--bg-2); border: 1px solid var(--border-dim);
+    border-radius: var(--radius-sm); padding: 8px 14px;
+    font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-0);
+    outline: none; transition: border-color var(--transition);
+  }
+  .search-bar:focus { border-color: var(--green); }
+  .search-bar::placeholder { color: var(--text-3); }
+  .table-wrap { overflow-x: auto; }
+  .pic-name { color: var(--text-0); font-size: 0.75rem; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .coord-link { color: var(--text-3); text-decoration: none; font-size: 0.68rem; }
+  .coord-link:hover { color: var(--green); }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    text-align: center;
+    transition: all var(--transition);
+    cursor: pointer;
+    margin-bottom: 20px;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--green);
+    background: var(--green-dim);
+  }
+  .upload-zone-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
+  .upload-zone-text { font-size: 0.8rem; color: var(--text-1); }
+
+  /* Lightbox */
+  .lightbox-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+    z-index: 1000; display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px; padding: 20px;
+  }
+  .lightbox-overlay.open { display: flex; }
+  .lightbox-img { max-width: 90vw; max-height: 75vh; border-radius: var(--radius-lg); object-fit: contain; }
+  .lightbox-info {
+    background: var(--bg-card); border: 1px solid var(--border-dim);
+    border-radius: var(--radius-md); padding: 14px 20px;
+    display: flex; gap: 24px; flex-wrap: wrap; font-size: 0.78rem;
+  }
+  .lightbox-info span { color: var(--text-1); }
+  .lightbox-info b { color: var(--text-0); }
+  .lightbox-close {
+    position: fixed; top: 20px; right: 24px;
+    background: none; border: none; color: var(--text-0);
+    font-size: 1.6rem; cursor: pointer; opacity: 0.7;
+    transition: opacity var(--transition);
+  }
+  .lightbox-close:hover { opacity: 1; }
+  .img-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 0.7rem; color: var(--text-3); padding: 0;
+    text-decoration: underline; transition: color var(--transition);
+  }
+  .img-btn:hover { color: var(--green); }
+
+  /* Upload modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 900; display: none; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--bg-card); border: 1px solid var(--border-dim);
+    border-radius: var(--radius-lg); padding: 28px; width: 100%; max-width: 480px;
+  }
+  .modal-title { font-family: var(--font-serif); font-size: 1.1rem; margin-bottom: 16px; color: var(--text-0); }
+  .modal-close { float: right; background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 1.2rem; }
+  .upload-result { font-size: 0.78rem; color: var(--green); margin-top: 12px; min-height: 20px; }
+  .cat-select {
+    width: 100%; background: var(--bg-2); border: 1px solid var(--border-dim);
+    border-radius: var(--radius-sm); padding: 8px 12px;
+    font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-0);
+    outline: none; margin-bottom: 14px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="flex items-center justify-between mb-4" style="margin-bottom:20px">
+  <div>
+    <h2 class="section-heading">Observations</h2>
+    <p class="section-sub" style="margin-bottom:0">{{ total }} record{{ 's' if total != 1 }}</p>
+  </div>
+  <div class="flex gap-2">
+    <button class="btn btn-ghost" onclick="openUploadModal()">↑ Upload Images</button>
+    <a href="/api/export-csv?category={{ active }}" class="btn btn-ghost">↓ CSV</a>
+    <a href="/api/export-excel?category={{ active }}" class="btn btn-ghost">↓ Excel</a>
+    <a href="/pipeline" class="btn btn-primary">▷ Run Pipeline</a>
+  </div>
+</div>
+
+<!-- Filter Tabs -->
+<div class="filter-tabs">
+  <a href="/observations" class="filter-tab {% if active == 'all' %}active{% endif %}">All ({{ total }})</a>
+  {% for cat, cfg in categories.items() %}
+  <a href="/observations?category={{ cat }}" class="filter-tab {% if active == cat %}active{% endif %}">
+    {{ cfg.icon }} {{ cfg.label }}
+  </a>
+  {% endfor %}
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <input type="text" class="search-bar" id="searchInput" placeholder="Search species, filename…" />
+  <a href="/api/backup" class="btn btn-ghost" title="Download ZIP backup of all CSVs + DB">💾 Backup</a>
+</div>
+
+{% if observations %}
+<div class="card">
+  <div class="table-wrap">
+    <table class="data-table" id="obsTable">
+      <thead>
+        <tr>
+          <th>Image</th>
+          <th>Category</th>
+          <th>Picture</th>
+          <th>Species (Common)</th>
+          <th>Scientific Name</th>
+          <th>Date</th>
+          <th>GPS</th>
+          <th>Alt (m)</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obs in observations %}
+        {% set cat = obs._category %}
+        <tr class="obs-row"
+            data-search="{{ (obs.get('common_name','') ~ ' ' ~ obs.get('scientific_name','') ~ ' ' ~ obs.get('picture_name','')).lower() }}">
+          <td>
+            {% set pic = obs.get('picture_name','') %}
+            {% if pic %}
+            <button class="img-btn"
+              data-src="/api/image/{{ cat }}/{{ pic }}"
+              data-species="{{ obs.get('common_name', obs.get('species_name','')) | e }}"
+              data-sci="{{ obs.get('scientific_name','') | e }}"
+              data-date="{{ obs.get('date','') | e }}"
+              data-gps="{{ obs.get('gps_string','') | e }}"
+              onclick="openLightboxFromBtn(this)">🖼 View</button>
+            {% else %}
+            <span style="color:var(--text-3);font-size:0.68rem">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge badge-{{ cat }}">
+              {% if cat=='insect' %}🪲{% elif cat=='flora' %}🌿{% else %}🍄{% endif %}
+              {{ cat|capitalize }}
+            </span>
+          </td>
+          <td class="pic-name" title="{{ obs.get('picture_name','') }}">{{ obs.get('picture_name','—') }}</td>
+          <td style="color:var(--text-0);font-weight:500;">{{ obs.get('common_name', obs.get('species_name','—')) or '—' }}</td>
+          <td style="font-style:italic;color:var(--text-2);font-size:0.73rem;">{{ obs.get('scientific_name','—') or '—' }}</td>
+          <td>{{ obs.get('date','—') }}</td>
+          <td>
+            {% set lat = obs.get('latitude_dd','') %}
+            {% set lon = obs.get('longitude_dd','') %}
+            {% if lat and lon and lat != '' and lon != '' %}
+            <a class="coord-link" href="https://www.google.com/maps?q={{ lat }},{{ lon }}" target="_blank">
+              📍 {{ '%.4f'|format(lat|float) }}, {{ '%.4f'|format(lon|float) }}
+            </a>
+            {% else %}
+            <span style="color:var(--text-3);font-size:0.68rem">No GPS</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--text-2);">{{ obs.get('altitude_m', obs.get('altitude','')) or '—' }}</td>
+          <td>
+            {% set st = obs.get('processing_status','') %}
+            <span class="status-dot {% if st=='SUCCESS' %}status-success{% elif st in ('AI_FAILED','EXIF_ERROR','CIRCUIT_BREAK') %}status-failed{% else %}status-partial{% endif %}"></span>
+            <span style="font-size:0.65rem;color:var(--text-3);margin-left:4px">{{ st or '—' }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="empty-state card">
+  <span class="empty-state-icon">🔍</span>
+  <div class="empty-state-text">No observations found{% if active != 'all' %} for <strong>{{ active }}</strong>{% endif %}.</div>
+  <a href="/pipeline" class="btn btn-primary" style="margin-top:16px;display:inline-flex">▷ Run Pipeline</a>
+</div>
+{% endif %}
+
+<!-- Lightbox -->
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightboxIfBg(event)">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img class="lightbox-img" id="lightboxImg" src="" alt="Observation" />
+  <div class="lightbox-info" id="lightboxInfo"></div>
+</div>
+
+<!-- Upload Modal -->
+<div class="modal-overlay" id="uploadModal" onclick="closeUploadIfBg(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeUploadModal()">✕</button>
+    <div class="modal-title">↑ Upload Images</div>
+
+    <select class="cat-select" id="uploadCat">
+      {% for cat, cfg in categories.items() %}
+      <option value="{{ cat }}">{{ cfg.icon }} {{ cfg.label }}</option>
+      {% endfor %}
+    </select>
+
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <span class="upload-zone-icon">📂</span>
+      <div class="upload-zone-text">Click or drag & drop images here<br>
+        <span style="font-size:0.65rem;color:var(--text-3)">.jpg · .jpeg · .png · .webp</span>
+      </div>
+    </div>
+    <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png,.webp" style="display:none" onchange="handleFiles(this.files)" />
+
+    <div class="upload-result" id="uploadResult"></div>
+
+    <div class="flex gap-2" style="margin-top:16px">
+      <button class="btn btn-primary" onclick="doUpload()" id="uploadBtn">↑ Upload</button>
+      <button class="btn btn-ghost" onclick="closeUploadModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // ── Search ──
+  document.getElementById('searchInput').addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll('.obs-row').forEach(row => {
+      row.style.display = row.dataset.search.includes(q) ? '' : 'none';
+    });
+  });
+
+  // ── Lightbox ──
+  function openLightboxFromBtn(btn) {
+    openLightbox(btn.dataset.src, btn.dataset.species, btn.dataset.sci, btn.dataset.date, btn.dataset.gps);
+  }
+  function openLightbox(src, species, sci, date, gps) {
+    document.getElementById('lightboxImg').src = src;
+    document.getElementById('lightboxInfo').innerHTML = `
+      <span><b>Species:</b> ${species || '—'}</span>
+      <span><b>Scientific:</b> <i>${sci || '—'}</i></span>
+      <span><b>Date:</b> ${date || '—'}</span>
+      <span><b>GPS:</b> ${gps || '—'}</span>
+    `;
+    document.getElementById('lightbox').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+    document.getElementById('lightboxImg').src = '';
+    document.body.style.overflow = '';
+  }
+  function closeLightboxIfBg(e) {
+    if (e.target.id === 'lightbox') closeLightbox();
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeLightbox(); closeUploadModal(); } });
+
+  // ── Upload Modal ──
+  let pendingFiles = null;
+
+  function openUploadModal()  { document.getElementById('uploadModal').classList.add('open'); }
+  function closeUploadModal() { document.getElementById('uploadModal').classList.remove('open'); pendingFiles = null; document.getElementById('uploadResult').textContent = ''; }
+  function closeUploadIfBg(e) { if (e.target.id === 'uploadModal') closeUploadModal(); }
+
+  function handleFiles(files) {
+    pendingFiles = files;
+    document.getElementById('uploadResult').textContent = `${files.length} file(s) selected`;
+    document.getElementById('uploadResult').style.color = 'var(--amber)';
+  }
+
+  // Drag & drop
+  const zone = document.getElementById('uploadZone');
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', ()  => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    handleFiles(e.dataTransfer.files);
+  });
+
+  async function doUpload() {
+    if (!pendingFiles || pendingFiles.length === 0) {
+      document.getElementById('uploadResult').textContent = 'No files selected.';
+      return;
+    }
+    const cat = document.getElementById('uploadCat').value;
+    const btn = document.getElementById('uploadBtn');
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+
+    const fd = new FormData();
+    fd.append('category', cat);
+    for (const f of pendingFiles) fd.append('images', f);
+
+    try {
+      const res  = await fetch('/api/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.error) {
+        document.getElementById('uploadResult').textContent = 'Error: ' + data.error;
+        document.getElementById('uploadResult').style.color = 'var(--red)';
+      } else {
+        document.getElementById('uploadResult').innerHTML =
+          `<span style="color:var(--green)">✓ Saved ${data.total_saved} file(s) to ${data.folder}</span>` +
+          (data.skipped.length ? `<br><span style="color:var(--amber)">Skipped: ${data.skipped.join(', ')}</span>` : '');
+      }
+    } catch(e) {
+      document.getElementById('uploadResult').textContent = 'Upload failed: ' + e;
+    }
+    btn.disabled = false;
+    btn.textContent = '↑ Upload';
+    pendingFiles = null;
+  }
+</script>
+{% endblock %}

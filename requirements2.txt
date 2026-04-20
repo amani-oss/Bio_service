@@ -1,0 +1,16 @@
+# BioField Dashboard — Python Dependencies
+
+# Core pipeline
+Pillow>=10.0.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+rich>=13.0.0
+
+# Map generation (includes plugins: HeatMap, MarkerCluster, MiniMap)
+folium>=0.15.0
+
+# Flask web app
+flask>=3.0.0
+
+# Excel export
+openpyxl>=3.1.0

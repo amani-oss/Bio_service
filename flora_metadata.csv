@@ -1,0 +1,4 @@
+picture_name,date,hour,model_used,gps_string,latitude_dd,longitude_dd,altitude_m,common_name,scientific_name,parse_success,processing_status
+IMG_2424.JPG,2026-01-12,17:27:21,google/gemma-3-4b-it:free,"34°41'34.68"" N, 3°11'36.21"" E",34.69296666666666,3.1933916666666664,1163.0942883046237,Honey Fungus,Armillaria mellea,True,SUCCESS
+IMG_2423.JPG,2026-01-12,17:27:09,google/gemma-3-4b-it:free,"34°41'34.67"" N, 3°11'36.17"" E",34.69296388888888,3.1933805555555552,1161.420405982906,Bark Beetles,Coleoptera: Curculionidae,True,SUCCESS
+IMG_5114_fruit1.jpeg,2023-05-31,16:16:38,google/gemma-3-4b-it:free,"34°40'25.01"" N, 3°7'3.89"" E",34.67361388888889,3.1177472222222224,1221.1,Desert Prickly Pear,Opuntia basilaris,True,SUCCESS

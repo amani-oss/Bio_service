@@ -1,0 +1,105 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          5.899425,
+          36.77077222222222
+        ]
+      },
+      "properties": {
+        "picture_name": "IMG_0272_wasp_spider.jpeg",
+        "category": "Insect",
+        "species_name": "European Garden Spider",
+        "scientific_name": "Araneus diadematus",
+        "date": "2025-09-24",
+        "hour": "07:24:47",
+        "altitude": "58.0",
+        "confidence": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.0521749999999996,
+          36.76603055555555
+        ]
+      },
+      "properties": {
+        "picture_name": "IMG_2307_perruche.jpg",
+        "category": "Insect",
+        "species_name": "Budgerigar",
+        "scientific_name": "Melopsittacus undulatus",
+        "date": "2024-08-25",
+        "hour": "18:25:44",
+        "altitude": "48.909260991580915",
+        "confidence": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.1933916666666664,
+          34.69296666666666
+        ]
+      },
+      "properties": {
+        "picture_name": "IMG_2424.JPG",
+        "category": "Flora",
+        "species_name": "Honey Fungus",
+        "scientific_name": "Armillaria mellea",
+        "date": "2026-01-12",
+        "hour": "17:27:21",
+        "altitude": "1163.0942883046237",
+        "confidence": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.1933805555555552,
+          34.69296388888888
+        ]
+      },
+      "properties": {
+        "picture_name": "IMG_2423.JPG",
+        "category": "Flora",
+        "species_name": "Bark Beetles",
+        "scientific_name": "Coleoptera: Curculionidae",
+        "date": "2026-01-12",
+        "hour": "17:27:09",
+        "altitude": "1161.420405982906",
+        "confidence": ""
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.1177472222222224,
+          34.67361388888889
+        ]
+      },
+      "properties": {
+        "picture_name": "IMG_5114_fruit1.jpeg",
+        "category": "Flora",
+        "species_name": "Desert Prickly Pear",
+        "scientific_name": "Opuntia basilaris",
+        "date": "2023-05-31",
+        "hour": "16:16:38",
+        "altitude": "1221.1",
+        "confidence": ""
+      }
+    }
+  ]
+}

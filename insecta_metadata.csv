@@ -1,0 +1,5 @@
+picture_name,date,hour,model_used,gps_string,latitude_dd,longitude_dd,altitude_m,common_name,scientific_name,parse_success,processing_status
+IMG_0272_wasp_spider.jpeg,2025-09-24,07:24:47,google/gemma-3-4b-it:free,"36°46'14.78"" N, 5°53'57.93"" E",36.77077222222222,5.899425,58.0,European Garden Spider,Araneus diadematus,True,SUCCESS
+IMG_2307_perruche.jpg,2024-08-25,18:25:44,google/gemma-3-4b-it:free,"36°45'57.71"" N, 3°3'7.83"" E",36.76603055555555,3.0521749999999996,48.909260991580915,Budgerigar,Melopsittacus undulatus,True,SUCCESS
+IMG_0554_azure_bug.jpeg,2024-05-31,12:54:01,google/gemma-3-4b-it:free,No GPS Data,,,,Blue Cypress Shieldbug,Coreuchus pellucidus,True,SUCCESS
+

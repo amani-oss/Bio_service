@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+{% block title %}Analytics{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .analytics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  .analytics-grid.full { grid-template-columns: 1fr; }
+  .chart-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-dim);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    animation: fadeUp 0.4s ease both;
+  }
+  .chart-card-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-dim);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .chart-card-title {
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-2);
+  }
+  .chart-card-body { padding: 20px; position: relative; }
+  .chart-wrap { position: relative; height: 240px; }
+  .chart-wrap.tall { height: 300px; }
+
+  .species-list { display: flex; flex-direction: column; gap: 8px; }
+  .species-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px;
+    background: var(--bg-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-dim);
+  }
+  .species-rank {
+    font-size: 0.65rem; color: var(--text-3);
+    width: 20px; text-align: right; flex-shrink: 0;
+  }
+  .species-name { flex: 1; font-size: 0.8rem; color: var(--text-0); }
+  .species-count {
+    font-size: 0.72rem; color: var(--green);
+    background: var(--green-dim);
+    padding: 2px 8px; border-radius: 20px;
+  }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-dim);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+    animation: fadeUp 0.3s ease both;
+  }
+  .kpi-value {
+    font-family: var(--font-serif);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-0);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .kpi-label { font-size: 0.68rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.1em; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-4" style="margin-bottom:20px">
+  <div>
+    <h2 class="section-heading">Analytics</h2>
+    <p class="section-sub" style="margin-bottom:0">
+      {{ data.total }} total observations across all categories
+    </p>
+  </div>
+  <div class="flex gap-2">
+    <a href="/api/export-csv" class="btn btn-ghost">↓ CSV</a>
+    <a href="/api/export-excel" class="btn btn-ghost">↓ Excel</a>
+  </div>
+</div>
+
+<!-- KPI Row -->
+<div class="kpi-row">
+  {% set total_species = data.species_richness.values()|sum %}
+  <div class="kpi-card" style="animation-delay:0ms">
+    <div class="kpi-value">{{ data.total }}</div>
+    <div class="kpi-label">Total Observations</div>
+  </div>
+  <div class="kpi-card" style="animation-delay:60ms">
+    <div class="kpi-value text-green">{{ total_species }}</div>
+    <div class="kpi-label">Unique Species</div>
+  </div>
+  <div class="kpi-card" style="animation-delay:120ms">
+    <div class="kpi-value text-amber">{{ data.gps_coverage.get('With GPS', 0) }}</div>
+    <div class="kpi-label">GPS-tagged</div>
+  </div>
+  <div class="kpi-card" style="animation-delay:180ms">
+    {% set success = data.status.get('SUCCESS', 0) %}
+    {% set rate = ((success / data.total) * 100)|int if data.total > 0 else 0 %}
+    <div class="kpi-value text-purple">{{ rate }}%</div>
+    <div class="kpi-label">AI Success Rate</div>
+  </div>
+</div>
+
+<!-- Row 1: Timeline + Species Richness -->
+<div class="analytics-grid">
+  <div class="chart-card" style="animation-delay:100ms">
+    <div class="chart-card-header">
+      <span class="chart-card-title">📅 Observations Over Time</span>
+    </div>
+    <div class="chart-card-body">
+      <div class="chart-wrap">
+        <canvas id="timelineChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card" style="animation-delay:150ms">
+    <div class="chart-card-header">
+      <span class="chart-card-title">🔬 Species Richness per Category</span>
+    </div>
+    <div class="chart-card-body">
+      <div class="chart-wrap">
+        <canvas id="richnessChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Row 2: Status + GPS Coverage + Altitude -->
+<div class="analytics-grid">
+  <div class="chart-card" style="animation-delay:200ms">
+    <div class="chart-card-header">
+      <span class="chart-card-title">✅ AI Processing Status</span>
+    </div>
+    <div class="chart-card-body">
+      <div class="chart-wrap">
+        <canvas id="statusChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card" style="animation-delay:250ms">
+    <div class="chart-card-header">
+      <span class="chart-card-title">📍 GPS Coverage</span>
+    </div>
+    <div class="chart-card-body">
+      <div class="chart-wrap">
+        <canvas id="gpsChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Row 3: Altitude + Top species -->
+<div class="analytics-grid">
+  <div class="chart-card" style="animation-delay:300ms">
+    <div class="chart-card-header">
+      <span class="chart-card-title">⛰️ Altitude Distribution</span>
+    </div>
+    <div class="chart-card-body">
+      <div class="chart-wrap">
+        <canvas id="altitudeChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card" style="animation-delay:350ms">
+    <div class="chart-card-header">
+      <span class="chart-card-title">🏆 Top 10 Most Observed Species</span>
+    </div>
+    <div class="chart-card-body" style="overflow-y:auto; max-height:280px;">
+      {% if data.top_species %}
+      <div class="species-list">
+        {% for name, count in data.top_species %}
+        <div class="species-row">
+          <span class="species-rank">#{{ loop.index }}</span>
+          <span class="species-name">{{ name }}</span>
+          <span class="species-count">{{ count }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state"><span class="empty-state-icon">🔍</span><div>No species data yet</div></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{# ── Jinja2 data injected into JSON script tags — keeps JS linter clean ── #}
+<script type="application/json" id="d-timeline">{{ data.timeline | tojson }}</script>
+<script type="application/json" id="d-richness">{{ data.species_richness | tojson }}</script>
+<script type="application/json" id="d-status">{{ data.status | tojson }}</script>
+<script type="application/json" id="d-gps">{{ data.gps_coverage | tojson }}</script>
+<script type="application/json" id="d-altitude">{{ data.altitude | tojson }}</script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  // Helper: read data safely from JSON script tags
+  function getChartData(id) {
+    try { return JSON.parse(document.getElementById(id).textContent); }
+    catch(e) { return {}; }
+  }
+
+  Chart.defaults.color = '#6b8a6d';
+  Chart.defaults.borderColor = '#1f2e20';
+  Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+  Chart.defaults.font.size   = 11;
+
+  const GRID = { color: '#1d2a1f', lineWidth: 1 };
+  const TICKS = { color: '#6b8a6d' };
+
+  function baseOptions(legend) {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: !!legend, labels: { color: '#a8bfaa', boxWidth: 12, padding: 16 } },
+        tooltip: {
+          backgroundColor: '#0f1610',
+          borderColor: '#2a3d2c',
+          borderWidth: 1,
+          titleColor: '#e8f0e9',
+          bodyColor: '#a8bfaa',
+          padding: 10,
+        }
+      }
+    };
+  }
+
+  // 1. Timeline
+  var tlData = getChartData('d-timeline');
+  if (tlData.labels && tlData.labels.length) {
+    new Chart(document.getElementById('timelineChart'), {
+      type: 'line',
+      data: {
+        labels: tlData.labels,
+        datasets: [{
+          label: 'Observations',
+          data: tlData.values,
+          borderColor: '#4ade80',
+          backgroundColor: '#4ade8022',
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: '#4ade80',
+          pointRadius: 4,
+        }]
+      },
+      options: Object.assign(baseOptions(false), {
+        scales: { x: { grid: GRID, ticks: TICKS }, y: { grid: GRID, ticks: TICKS, beginAtZero: true } }
+      })
+    });
+  }
+
+  // 2. Species Richness
+  var richData = getChartData('d-richness');
+  if (Object.keys(richData).length) {
+    new Chart(document.getElementById('richnessChart'), {
+      type: 'bar',
+      data: {
+        labels: Object.keys(richData).map(function(k) { return k.charAt(0).toUpperCase() + k.slice(1); }),
+        datasets: [{
+          label: 'Unique Species',
+          data: Object.values(richData),
+          backgroundColor: ['#f59e0b99', '#4ade8099', '#c084fc99'],
+          borderColor: ['#f59e0b', '#4ade80', '#c084fc'],
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: Object.assign(baseOptions(false), {
+        scales: { x: { grid: GRID, ticks: TICKS }, y: { grid: GRID, ticks: TICKS, beginAtZero: true } }
+      })
+    });
+  }
+
+  // 3. Status doughnut
+  var stData = getChartData('d-status');
+  var stColors = { SUCCESS: '#4ade80', AI_FAILED: '#f87171', EXIF_ERROR: '#f59e0b', CIRCUIT_BREAK: '#c084fc', UNKNOWN: '#3d5a3f' };
+  if (Object.keys(stData).length) {
+    new Chart(document.getElementById('statusChart'), {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(stData),
+        datasets: [{
+          data: Object.values(stData),
+          backgroundColor: Object.keys(stData).map(function(k) { return (stColors[k] || '#6b8a6d') + '99'; }),
+          borderColor: Object.keys(stData).map(function(k) { return stColors[k] || '#6b8a6d'; }),
+          borderWidth: 1,
+        }]
+      },
+      options: Object.assign(baseOptions(true), { cutout: '65%' })
+    });
+  }
+
+  // 4. GPS pie
+  var gpsData = getChartData('d-gps');
+  if (Object.keys(gpsData).length) {
+    new Chart(document.getElementById('gpsChart'), {
+      type: 'pie',
+      data: {
+        labels: Object.keys(gpsData),
+        datasets: [{
+          data: Object.values(gpsData),
+          backgroundColor: ['#4ade8099', '#3d5a3f99'],
+          borderColor: ['#4ade80', '#3d5a3f'],
+          borderWidth: 1,
+        }]
+      },
+      options: baseOptions(true)
+    });
+  }
+
+  // 5. Altitude bar
+  var altData = getChartData('d-altitude');
+  if (Object.keys(altData).length) {
+    new Chart(document.getElementById('altitudeChart'), {
+      type: 'bar',
+      data: {
+        labels: Object.keys(altData),
+        datasets: [{
+          label: 'Observations',
+          data: Object.values(altData),
+          backgroundColor: '#60a5fa66',
+          borderColor: '#60a5fa',
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: Object.assign(baseOptions(false), {
+        scales: { x: { grid: GRID, ticks: TICKS }, y: { grid: GRID, ticks: TICKS, beginAtZero: true } }
+      })
+    });
+  }
+</script>
+{% endblock %}

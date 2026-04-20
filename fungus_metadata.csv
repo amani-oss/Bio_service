@@ -1,0 +1,2 @@
+picture_name,date,hour,model_used,gps_string,latitude_dd,longitude_dd,altitude_m,common_name,scientific_name,parse_success,processing_status
+image.png,N/A,N/A,google/gemma-3-4b-it:free,No GPS Data,,,,Pore Mushroom,Crepidotus spp.,True,SUCCESS

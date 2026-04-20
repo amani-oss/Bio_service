@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .recent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .obs-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-dim);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    transition: all var(--transition);
+    animation: fadeUp 0.4s ease both;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .obs-card:hover {
+    border-color: var(--border);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+
+  .obs-card-species {
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    color: var(--text-0);
+    margin-bottom: 2px;
+  }
+
+  .obs-card-sci {
+    font-size: 0.7rem;
+    font-style: italic;
+    color: var(--text-2);
+    margin-bottom: 10px;
+  }
+
+  .obs-card-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    align-items: center;
+  }
+
+  .meta-item {
+    font-size: 0.65rem;
+    color: var(--text-3);
+  }
+
+  .category-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .chart-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .chart-label {
+    width: 60px;
+    font-size: 0.72rem;
+    color: var(--text-1);
+    flex-shrink: 0;
+  }
+
+  .chart-bar-wrap {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-3);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .chart-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .chart-count {
+    font-size: 0.7rem;
+    color: var(--text-2);
+    width: 30px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .map-preview-cta {
+    background: var(--bg-2);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    text-align: center;
+    text-decoration: none;
+    display: block;
+    transition: all var(--transition);
+  }
+  .map-preview-cta:hover {
+    border-color: var(--green);
+    background: var(--green-dim);
+  }
+  .map-preview-cta-icon { font-size: 2.5rem; display: block; margin-bottom: 10px; }
+  .map-preview-cta-text { font-size: 0.85rem; color: var(--text-1); }
+  .map-preview-cta:hover .map-preview-cta-text { color: var(--green); }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 24px;
+    margin-bottom: 28px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Hero Stats -->
+<div class="stat-grid">
+  <div class="stat-card" style="--accent-color: var(--green); animation-delay: 0ms">
+    <span class="stat-icon">🔬</span>
+    <div class="stat-value">{{ stats.total }}</div>
+    <div class="stat-label">Total Observations</div>
+    <div class="stat-sub">{{ stats.db_processed }} processed</div>
+  </div>
+
+  <div class="stat-card" style="--accent-color: var(--amber); animation-delay: 60ms">
+    <span class="stat-icon">🪲</span>
+    <div class="stat-value">{{ stats.categories.insect.total }}</div>
+    <div class="stat-label">Insects</div>
+    <div class="stat-sub">{{ stats.categories.insect.images_on_disk }} images on disk</div>
+  </div>
+
+  <div class="stat-card" style="--accent-color: var(--green); animation-delay: 120ms">
+    <span class="stat-icon">🌿</span>
+    <div class="stat-value">{{ stats.categories.flora.total }}</div>
+    <div class="stat-label">Flora</div>
+    <div class="stat-sub">{{ stats.categories.flora.images_on_disk }} images on disk</div>
+  </div>
+
+  <div class="stat-card" style="--accent-color: var(--purple); animation-delay: 180ms">
+    <span class="stat-icon">🍄</span>
+    <div class="stat-value">{{ stats.categories.fungus.total }}</div>
+    <div class="stat-label">Fungi</div>
+    <div class="stat-sub">{{ stats.categories.fungus.images_on_disk }} images on disk</div>
+  </div>
+
+  <div class="stat-card" style="--accent-color: #60a5fa; animation-delay: 240ms">
+    <span class="stat-icon">📍</span>
+    <div class="stat-value">{{ stats.with_gps }}</div>
+    <div class="stat-label">GPS Points</div>
+    <div class="stat-sub">geo-tagged observations</div>
+  </div>
+</div>
+
+<!-- Middle row -->
+<div class="two-col">
+
+  <!-- Recent Observations -->
+  <div>
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="section-heading">Recent Observations</h2>
+        <p class="section-sub" style="margin-bottom: 0">Latest field records across all categories</p>
+      </div>
+      <a href="/observations" class="btn btn-ghost">View all →</a>
+    </div>
+
+    {% if recent %}
+    <div class="recent-grid">
+      {% for obs in recent %}
+      <div class="obs-card" style="animation-delay: {{ loop.index0 * 50 }}ms">
+        <div class="flex items-center justify-between mb-4" style="margin-bottom:8px">
+          {% set cat = obs._category %}
+          <span class="badge badge-{{ cat }}">
+            {% if cat == 'insect' %}🪲{% elif cat == 'flora' %}🌿{% else %}🍄{% endif %}
+            {{ cat | capitalize }}
+          </span>
+          <span class="status-dot {% if obs.get('processing_status','') == 'SUCCESS' %}status-success{% elif obs.get('processing_status','') %}status-partial{% else %}status-failed{% endif %}"></span>
+        </div>
+
+        <div class="obs-card-species">
+          {{ obs.get('common_name', obs.get('species_name', 'Unknown')) or 'Unknown' }}
+        </div>
+        <div class="obs-card-sci">
+          {{ obs.get('scientific_name', '') or '—' }}
+        </div>
+
+        <div class="obs-card-meta">
+          <span class="meta-item">📷 {{ obs.get('picture_name', '') }}</span>
+          {% if obs.get('date') and obs.get('date') != 'N/A' %}
+          <span class="meta-item">📅 {{ obs.get('date') }}</span>
+          {% endif %}
+          {% set gps = obs.get('gps_string', '') %}
+          {% if gps and gps != 'No GPS Data' %}
+          <span class="gps-tag">GPS ✓</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="empty-state card">
+      <span class="empty-state-icon">📂</span>
+      <div class="empty-state-text">No observations yet.<br>Run the pipeline to process your images.</div>
+      <a href="/pipeline" class="btn btn-primary" style="margin-top: 16px; display: inline-flex;">Go to Pipeline →</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Right column -->
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+
+    <!-- Distribution chart -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Category Distribution</span>
+      </div>
+      <div class="card-body">
+        {% set total = stats.total if stats.total > 0 else 1 %}
+        <div class="category-chart">
+          {% for cat, cfg in stats.categories.items() %}
+          <div class="chart-row">
+            <span class="chart-label">{{ cfg.icon }} {{ cat | capitalize }}</span>
+            <div class="chart-bar-wrap">
+              <div class="chart-bar"
+                   style="width: {{ (cfg.total / total * 100) | int }}%; background: {{ cfg.color }};">
+              </div>
+            </div>
+            <span class="chart-count">{{ cfg.total }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Map CTA -->
+    <a href="/map" class="map-preview-cta">
+      <span class="map-preview-cta-icon">🗺️</span>
+      <div class="map-preview-cta-text">
+        {% if stats.map_exists %}
+          Open Field Map<br>
+          <span style="font-size:0.65rem; color: var(--green);">● Map available</span>
+        {% else %}
+          Generate Field Map<br>
+          <span style="font-size:0.65rem;">{{ stats.with_gps }} GPS points ready</span>
+        {% endif %}
+      </div>
+    </a>
+
+    <!-- Quick Actions -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Quick Actions</span>
+      </div>
+      <div class="card-body" style="display: flex; flex-direction: column; gap: 10px;">
+        <a href="/pipeline" class="btn btn-primary" style="justify-content: center;">▷ Run Pipeline</a>
+        <a href="/observations" class="btn btn-ghost" style="justify-content: center;">≡ Browse Data</a>
+        <a href="/map" class="btn btn-ghost" style="justify-content: center;">◎ View Map</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Auto-refresh stats every 30s
+  setTimeout(() => location.reload(), 30000);
+</script>
+{% endblock %}

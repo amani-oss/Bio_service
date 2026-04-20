@@ -351,7 +351,7 @@ class ObservationPipeline:
         self.folder     = Path(folder)
         self.csv_path   = Path(csv_path)
         self.extractor  = ExifExtractor()
-        self.identifier = SpeciesIdentifier(api_key=os.getenv("OPENROUTER_API_KEY", "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"))
+        self.identifier = SpeciesIdentifier(api_key=os.getenv("OPENROUTER_API_KEY"))
         self.state      = StateManager()
         self.writer     = CSVWriter(self.csv_path)
  

@@ -509,5 +509,7 @@ def api_logs(stream_id: str):
  
 # ── Main ───────────────────────────────────────────────────────────────────────
  
+import os
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5050, threaded=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

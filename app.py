@@ -1,187 +1,233 @@
 """
-app.py — BioField Dashboard  (v3 — enhanced)
+app.py — BioField Dashboard  (v4 — Cloud Edition)
 author: Dr. Hakim Mitiche  |  Flask UI by Claude
 
-New in v3:
-  - /analytics         : Charts (time-series, species richness, success rate, altitude)
-  - /api/geojson       : Download GeoJSON export
-  - /api/export-csv    : Filtered CSV download
-  - /api/export-excel  : Filtered Excel download  (requires openpyxl)
-  - /api/backup        : ZIP of all CSVs + SQLite DB
-  - /api/upload        : Drag-and-drop image upload to the correct folder
-  - /api/image/<cat>/<filename> : Serve images for the lightbox viewer
+Storage:
+  - Images  → Cloudinary (object storage, permanent URLs)
+  - Data    → PostgreSQL  (all observations, metadata, processing state)
+
+No local files required. Works on Render, Railway, Fly.io, etc.
 """
+
 
 from __future__ import annotations
 
 import csv
 import io
 import json
+import logging
 import os
 import queue
-import shutil
-import sqlite3
 import subprocess
 import sys
-import tempfile
 import threading
 import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 
+import cloudinary
+import cloudinary.uploader
+import psycopg2
+import psycopg2.extras
+from dotenv import load_dotenv
 from flask import (Flask, Response, jsonify, render_template,
                    request, send_file, stream_with_context)
-from werkzeug.utils import secure_filename
+
+load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024   # 50 MB per upload
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-BASE_DIR   = Path(__file__).parent
-IMAGE_ROOT = BASE_DIR / "image"
+BASE_DIR = Path(__file__).parent
 
 CATEGORIES = {
-    "insect": {
-        "csv":    BASE_DIR / "insecta_metadata.csv",
-        "folder": IMAGE_ROOT / "images_insects",
-        "label":  "Insects",
-        "color":  "#f59e0b",
-        "icon":   "🪲",
-    },
-    "flora": {
-        "csv":    BASE_DIR / "flora_metadata.csv",
-        "folder": IMAGE_ROOT / "images_flora",
-        "label":  "Flora",
-        "color":  "#4ade80",
-        "icon":   "🌿",
-    },
-    "fungus": {
-        "csv":    BASE_DIR / "fungus_metadata.csv",
-        "folder": IMAGE_ROOT / "images_fungus",
-        "label":  "Fungi",
-        "color":  "#c084fc",
-        "icon":   "🍄",
-    },
+    "insect": {"label": "Insects", "color": "#f59e0b", "icon": "🪲"},
+    "flora":  {"label": "Flora",   "color": "#4ade80", "icon": "🌿"},
+    "fungus": {"label": "Fungi",   "color": "#c084fc", "icon": "🍄"},
 }
 
-MAP_FILE     = BASE_DIR / "bio_observations_map.html"
-GEOJSON_FILE = BASE_DIR / "bio_observations.geojson"
-DB_FILE      = BASE_DIR / "pipeline_state.db"
-ALLOWED_EXT  = {".jpg", ".jpeg", ".png", ".webp"}
+ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 
-_log_queues: dict[str, queue.Queue] = {}
+# ── Cloudinary ─────────────────────────────────────────────────────────────────
+
+cloudinary.config(
+    cloud_name = os.environ["CLOUDINARY_CLOUD_NAME"],
+    api_key    = os.environ["CLOUDINARY_API_KEY"],
+    api_secret = os.environ["CLOUDINARY_API_SECRET"],
+    secure     = True,
+)
+
+# ── PostgreSQL ─────────────────────────────────────────────────────────────────
+
+def get_db():
+    """Return a new psycopg2 connection. Use as a context manager."""
+    return psycopg2.connect(os.environ["DATABASE_URL"], sslmode="require")
+
+
+def init_db():
+    """Create tables if they don't exist yet. Called once at startup."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS observations (
+                    id                SERIAL PRIMARY KEY,
+                    category          VARCHAR(20)  NOT NULL,
+                    picture_name      VARCHAR(255),
+                    cloudinary_url    TEXT,
+                    cloudinary_public_id VARCHAR(255),
+                    common_name       VARCHAR(255),
+                    scientific_name   VARCHAR(255),
+                    species_name      VARCHAR(255),
+                    date              VARCHAR(50),
+                    gps_string        TEXT,
+                    latitude_dd       DOUBLE PRECISION,
+                    longitude_dd      DOUBLE PRECISION,
+                    altitude_m        DOUBLE PRECISION,
+                    processing_status VARCHAR(50)  DEFAULT 'PENDING',
+                    created_at        TIMESTAMP    DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_obs_category
+                    ON observations(category);
+                CREATE INDEX IF NOT EXISTS idx_obs_status
+                    ON observations(processing_status);
+            """)
+        conn.commit()
+    app.logger.info("Database initialised.")
 
 
 # ── Data Helpers ───────────────────────────────────────────────────────────────
 
-def read_csv(csv_path: Path, category: str) -> list[dict]:
-    if not csv_path.exists():
-        return []
-    rows = []
-    with open(csv_path, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            row["_category"] = category
-            rows.append(row)
-    return rows
-
-
-def get_all_observations() -> list[dict]:
-    all_rows = []
-    for cat, cfg in CATEGORIES.items():
-        all_rows.extend(read_csv(cfg["csv"], cat))
-    return all_rows
+def get_all_observations(category: str = "all") -> list[dict]:
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            if category == "all":
+                cur.execute("SELECT * FROM observations ORDER BY created_at DESC")
+            else:
+                cur.execute(
+                    "SELECT * FROM observations WHERE category = %s ORDER BY created_at DESC",
+                    (category,)
+                )
+            rows = cur.fetchall()
+    # Convert RealDictRow → plain dict, add _category alias for templates
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["_category"] = d["category"]
+        result.append(d)
+    return result
 
 
 def get_stats() -> dict:
-    stats = {"total": 0, "with_gps": 0, "categories": {}}
-    for cat, cfg in CATEGORIES.items():
-        rows = read_csv(cfg["csv"], cat)
-        gps_count = sum(1 for r in rows
-                        if r.get("gps_string", "").strip() not in ("", "No GPS Data"))
-        stats["categories"][cat] = {
-            "total": len(rows), "with_gps": gps_count,
-            "label": cfg["label"], "color": cfg["color"], "icon": cfg["icon"],
-        }
-        stats["total"]    += len(rows)
-        stats["with_gps"] += gps_count
+    stats = {"total": 0, "with_gps": 0, "categories": {}, "db_processed": 0}
 
-    for cat, cfg in CATEGORIES.items():
-        folder = cfg["folder"]
-        imgs   = [f for f in folder.iterdir() if f.suffix.lower() in ALLOWED_EXT] if folder.exists() else []
-        stats["categories"][cat]["images_on_disk"] = len(imgs)
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # Per-category totals
+            cur.execute("""
+                SELECT category,
+                       COUNT(*)                                          AS total,
+                       COUNT(*) FILTER (WHERE gps_string IS NOT NULL
+                                          AND gps_string != 'No GPS Data'
+                                          AND gps_string != '')          AS with_gps,
+                       COUNT(*) FILTER (WHERE cloudinary_url IS NOT NULL) AS images_in_cloud
+                FROM observations
+                GROUP BY category
+            """)
+            for cat, total, gps, imgs in cur.fetchall():
+                stats["categories"][cat] = {
+                    "total":          total,
+                    "with_gps":       gps,
+                    "images_on_disk": imgs,   # reuse field name so templates work unchanged
+                    "label": CATEGORIES.get(cat, {}).get("label", cat),
+                    "color": CATEGORIES.get(cat, {}).get("color", "#888"),
+                    "icon":  CATEGORIES.get(cat, {}).get("icon",  "?"),
+                }
+                stats["total"]    += total
+                stats["with_gps"] += gps
 
-    stats["db_processed"] = 0
-    if DB_FILE.exists():
-        try:
-            conn = sqlite3.connect(DB_FILE)
-            stats["db_processed"] = conn.execute("SELECT COUNT(*) FROM processed_images").fetchone()[0]
-            conn.close()
-        except Exception:
-            pass
+            # Ensure all categories exist even if empty
+            for cat, cfg in CATEGORIES.items():
+                if cat not in stats["categories"]:
+                    stats["categories"][cat] = {
+                        "total": 0, "with_gps": 0, "images_on_disk": 0,
+                        "label": cfg["label"], "color": cfg["color"], "icon": cfg["icon"],
+                    }
 
-    stats["map_exists"]     = MAP_FILE.exists()
-    stats["geojson_exists"] = GEOJSON_FILE.exists()
+            # Processed count
+            cur.execute("SELECT COUNT(*) FROM observations WHERE processing_status = 'SUCCESS'")
+            stats["db_processed"] = cur.fetchone()[0]
+
+    # Map file no longer stored locally on Render; mark as not available by default.
+    # (map.py can upload the generated HTML to Cloudinary or store as a DB record too)
+    stats["map_exists"]     = (BASE_DIR / "bio_observations_map.html").exists()
+    stats["geojson_exists"] = (BASE_DIR / "bio_observations.geojson").exists()
     return stats
 
 
 def get_recent_observations(limit: int = 10) -> list[dict]:
-    rows = get_all_observations()
-    rows.sort(key=lambda r: r.get("date", ""), reverse=True)
-    return rows[:limit]
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT * FROM observations ORDER BY created_at DESC LIMIT %s",
+                (limit,)
+            )
+            rows = cur.fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["_category"] = d["category"]
+        result.append(d)
+    return result
 
 
 def get_analytics_data() -> dict:
-    """Aggregate observation data for charts."""
     rows = get_all_observations()
 
-    # 1. Observations per month
     month_counts: dict[str, int] = defaultdict(int)
     for r in rows:
-        d = r.get("date", "")
+        d = r.get("date", "") or ""
         if d and d != "N/A" and len(d) >= 7:
             month_counts[d[:7]] += 1
     months_sorted = sorted(month_counts.items())
 
-    # 2. Unique species per category
     species_by_cat: dict[str, set] = defaultdict(set)
     for r in rows:
-        name = (r.get("common_name") or r.get("species_name", "")).strip()
+        name = (r.get("common_name") or r.get("species_name") or "").strip()
         if name and name.lower() not in ("unknown", ""):
             species_by_cat[r["_category"]].add(name)
 
-    # 3. Processing status breakdown
     status_counts: Counter = Counter()
     for r in rows:
-        st = r.get("processing_status", "UNKNOWN") or "UNKNOWN"
+        st = r.get("processing_status") or "UNKNOWN"
         status_counts[st] += 1
 
-    # 4. Altitude distribution buckets (0-500, 500-1000, 1000-1500, 1500+)
     alt_buckets = {"0–500 m": 0, "500–1000 m": 0, "1000–1500 m": 0, "1500+ m": 0}
     for r in rows:
         try:
-            a = float(r.get("altitude_m") or r.get("altitude") or 0)
-            if a < 500:
-                alt_buckets["0–500 m"] += 1
-            elif a < 1000:
-                alt_buckets["500–1000 m"] += 1
-            elif a < 1500:
-                alt_buckets["1000–1500 m"] += 1
-            else:
-                alt_buckets["1500+ m"] += 1
+            a = float(r.get("altitude_m") or 0)
+            if a < 500:       alt_buckets["0–500 m"]    += 1
+            elif a < 1000:    alt_buckets["500–1000 m"] += 1
+            elif a < 1500:    alt_buckets["1000–1500 m"]+= 1
+            else:             alt_buckets["1500+ m"]    += 1
         except (ValueError, TypeError):
             pass
 
-    # 5. Top 10 most observed species
     all_species: Counter = Counter()
     for r in rows:
-        name = (r.get("common_name") or r.get("species_name", "")).strip()
+        name = (r.get("common_name") or r.get("species_name") or "").strip()
         if name and name.lower() not in ("unknown", ""):
             all_species[name] += 1
-    top_species = all_species.most_common(10)
 
-    # 6. GPS vs no-GPS
-    with_gps    = sum(1 for r in rows if r.get("gps_string", "").strip() not in ("", "No GPS Data"))
+    with_gps    = sum(1 for r in rows
+                      if (r.get("gps_string") or "").strip() not in ("", "No GPS Data"))
     without_gps = len(rows) - with_gps
 
     return {
@@ -190,27 +236,30 @@ def get_analytics_data() -> dict:
             "labels": [m[0] for m in months_sorted],
             "values": [m[1] for m in months_sorted],
         },
-        "species_richness": {
-            cat: len(sp) for cat, sp in species_by_cat.items()
-        },
-        "status": dict(status_counts),
-        "altitude": alt_buckets,
-        "top_species": top_species,
-        "gps_coverage": {"With GPS": with_gps, "No GPS": without_gps},
+        "species_richness": {cat: len(sp) for cat, sp in species_by_cat.items()},
+        "status":           dict(status_counts),
+        "altitude":         alt_buckets,
+        "top_species":      all_species.most_common(10),
+        "gps_coverage":     {"With GPS": with_gps, "No GPS": without_gps},
     }
 
 
 # ── SSE Streaming ──────────────────────────────────────────────────────────────
 
+_log_queues: dict[str, queue.Queue] = {}
+
+
 def _stream_subprocess(cmd: list[str], stream_id: str):
     q = _log_queues[stream_id]
     try:
+        env = {**os.environ}   # pass all env vars (DATABASE_URL, CLOUDINARY_*, etc.)
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, bufsize=1, cwd=str(BASE_DIR))
+                                text=True, bufsize=1, cwd=str(BASE_DIR), env=env)
         for line in proc.stdout:
             q.put({"type": "log", "text": line.rstrip()})
         proc.wait()
-        q.put({"type": "done", "rc": proc.returncode, "text": f"[Exit code {proc.returncode}]"})
+        q.put({"type": "done", "rc": proc.returncode,
+               "text": f"[Exit code {proc.returncode}]"})
     except Exception as e:
         q.put({"type": "error", "text": str(e)})
     finally:
@@ -248,25 +297,26 @@ def index():
 @app.route("/observations")
 def observations():
     cat_filter = request.args.get("category", "all")
-    all_obs    = get_all_observations()
-    if cat_filter != "all":
-        all_obs = [r for r in all_obs if r["_category"] == cat_filter]
+    all_obs    = get_all_observations(cat_filter)
     return render_template("observations.html", observations=all_obs,
                            active=cat_filter, total=len(all_obs))
 
 
 @app.route("/map")
 def map_view():
+    map_file = BASE_DIR / "bio_observations_map.html"
+    geo_file = BASE_DIR / "bio_observations.geojson"
     return render_template("map_view.html",
-                           map_exists=MAP_FILE.exists(),
-                           geojson_exists=GEOJSON_FILE.exists())
+                           map_exists=map_file.exists(),
+                           geojson_exists=geo_file.exists())
 
 
 @app.route("/map-content")
 def map_content():
-    if not MAP_FILE.exists():
+    map_file = BASE_DIR / "bio_observations_map.html"
+    if not map_file.exists():
         return "Map not generated yet.", 404
-    return MAP_FILE.read_text(encoding="utf-8"), 200, {"Content-Type": "text/html"}
+    return map_file.read_text(encoding="utf-8"), 200, {"Content-Type": "text/html"}
 
 
 @app.route("/analytics")
@@ -277,11 +327,11 @@ def analytics():
 @app.route("/upload")
 def upload_page():
     stats = get_stats()
-    # Enrich CATEGORIES with disk counts for the template
     cats_with_counts = {}
     for cat, cfg in CATEGORIES.items():
         cats_with_counts[cat] = dict(cfg)
-        cats_with_counts[cat]["images_on_disk"] = stats["categories"][cat]["images_on_disk"]
+        cats_with_counts[cat]["images_on_disk"] = stats["categories"].get(
+            cat, {}).get("images_on_disk", 0)
     return render_template("upload.html", categories=cats_with_counts)
 
 
@@ -307,12 +357,6 @@ def api_analytics():
 
 @app.route("/api/geojson")
 def api_geojson():
-    """Download GeoJSON file (regenerated from CSVs on the fly if needed)."""
-    if GEOJSON_FILE.exists():
-        return send_file(GEOJSON_FILE, as_attachment=True,
-                         download_name="bio_observations.geojson",
-                         mimetype="application/geo+json")
-    # Build on the fly
     rows = get_all_observations()
     features = []
     for r in rows:
@@ -332,26 +376,28 @@ def api_geojson():
                 "species_name":    r.get("common_name") or r.get("species_name", ""),
                 "scientific_name": r.get("scientific_name", ""),
                 "date":            r.get("date", ""),
-                "altitude":        r.get("altitude_m") or r.get("altitude", ""),
+                "altitude":        r.get("altitude_m", ""),
+                "cloudinary_url":  r.get("cloudinary_url", ""),
             },
         })
     geojson_str = json.dumps({"type": "FeatureCollection", "features": features},
                              ensure_ascii=False, indent=2)
     return Response(geojson_str, mimetype="application/geo+json",
-                    headers={"Content-Disposition": "attachment; filename=bio_observations.geojson"})
+                    headers={"Content-Disposition":
+                             "attachment; filename=bio_observations.geojson"})
 
 
 @app.route("/api/export-csv")
 def api_export_csv():
     cat_filter = request.args.get("category", "all")
-    rows = get_all_observations()
-    if cat_filter != "all":
-        rows = [r for r in rows if r["_category"] == cat_filter]
-
+    rows = get_all_observations(cat_filter)
     if not rows:
         return jsonify({"error": "No data"}), 404
 
-    fieldnames = [k for k in rows[0].keys() if not k.startswith("_")]
+    # Exclude internal fields
+    skip = {"_category", "id"}
+    fieldnames = [k for k in rows[0].keys() if k not in skip]
+
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
@@ -369,55 +415,42 @@ def api_export_excel():
         from openpyxl.styles import Font, PatternFill, Alignment
         from openpyxl.utils import get_column_letter
     except ImportError:
-        return jsonify({"error": "openpyxl not installed. Run: pip install openpyxl"}), 500
+        return jsonify({"error": "openpyxl not installed."}), 500
 
     cat_filter = request.args.get("category", "all")
-    rows = get_all_observations()
-    if cat_filter != "all":
-        rows = [r for r in rows if r["_category"] == cat_filter]
+    rows = get_all_observations(cat_filter)
     if not rows:
         return jsonify({"error": "No data"}), 404
 
+    skip = {"_category", "id"}
     wb = openpyxl.Workbook()
-
-    # One sheet per category (or just one if filtered)
-    if cat_filter == "all":
-        sheets_data = {}
-        for r in rows:
-            sheets_data.setdefault(r["_category"], []).append(r)
-    else:
-        sheets_data = {cat_filter: rows}
+    sheets_data = {}
+    for r in rows:
+        sheets_data.setdefault(r["_category"], []).append(r)
 
     CAT_COLORS = {"insect": "FFF59E0B", "flora": "FF4ADE80", "fungus": "FFC084FC"}
 
     for idx, (cat, cat_rows) in enumerate(sheets_data.items()):
         ws = wb.active if idx == 0 else wb.create_sheet()
         ws.title = cat.capitalize()
-
-        fieldnames = [k for k in cat_rows[0].keys() if not k.startswith("_")]
-        header_fill = PatternFill("solid", fgColor=CAT_COLORS.get(cat, "FF4ADE80"))
-        header_font = Font(bold=True, color="FF000000")
-
+        fieldnames = [k for k in cat_rows[0].keys() if k not in skip]
+        hfill = PatternFill("solid", fgColor=CAT_COLORS.get(cat, "FF4ADE80"))
+        hfont = Font(bold=True, color="FF000000")
         for col_i, field in enumerate(fieldnames, 1):
             cell = ws.cell(row=1, column=col_i, value=field.replace("_", " ").title())
-            cell.fill   = header_fill
-            cell.font   = header_font
+            cell.fill = hfill; cell.font = hfont
             cell.alignment = Alignment(horizontal="center")
-
         for row_i, r in enumerate(cat_rows, 2):
             for col_i, field in enumerate(fieldnames, 1):
                 ws.cell(row=row_i, column=col_i, value=r.get(field, ""))
-
         for col_i in range(1, len(fieldnames) + 1):
             ws.column_dimensions[get_column_letter(col_i)].auto_size = True
 
-    # Remove default empty sheet if we added named sheets
     if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
         del wb["Sheet"]
 
     buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
+    wb.save(buf); buf.seek(0)
     fname = f"bio_{cat_filter}.xlsx"
     return send_file(buf, as_attachment=True, download_name=fname,
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -425,66 +458,102 @@ def api_export_excel():
 
 @app.route("/api/backup")
 def api_backup():
-    """Download a ZIP containing all CSVs and the SQLite database."""
+    """Export all observations as a CSV + GeoJSON ZIP (no local DB to back up)."""
+    rows = get_all_observations()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for cat, cfg in CATEGORIES.items():
-            if cfg["csv"].exists():
-                zf.write(cfg["csv"], cfg["csv"].name)
-        if DB_FILE.exists():
-            zf.write(DB_FILE, DB_FILE.name)
-        if GEOJSON_FILE.exists():
-            zf.write(GEOJSON_FILE, GEOJSON_FILE.name)
+        # CSV per category
+        for cat in CATEGORIES:
+            cat_rows = [r for r in rows if r["_category"] == cat]
+            if cat_rows:
+                skip = {"_category", "id"}
+                fieldnames = [k for k in cat_rows[0].keys() if k not in skip]
+                sbuf = io.StringIO()
+                writer = csv.DictWriter(sbuf, fieldnames=fieldnames, extrasaction="ignore")
+                writer.writeheader(); writer.writerows(cat_rows)
+                zf.writestr(f"bio_{cat}.csv", sbuf.getvalue())
     buf.seek(0)
     return send_file(buf, as_attachment=True, download_name="biofield_backup.zip",
                      mimetype="application/zip")
 
 
-# ── Image API ──────────────────────────────────────────────────────────────────
+# ── Image API — now just redirects to Cloudinary URL ──────────────────────────
 
-@app.route("/api/image/<cat>/<path:filename>")
-def api_image(cat: str, filename: str):
-    """Serve an observation image for the lightbox viewer."""
-    if cat not in CATEGORIES:
-        return "Unknown category", 404
-    folder = CATEGORIES[cat]["folder"]
-    safe   = secure_filename(filename)
-    path   = folder / safe
-    if not path.exists() or path.suffix.lower() not in ALLOWED_EXT:
+@app.route("/api/image-url/<int:obs_id>")
+def api_image_url(obs_id: int):
+    """Return the Cloudinary URL for a given observation id."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT cloudinary_url FROM observations WHERE id = %s", (obs_id,))
+            row = cur.fetchone()
+    if not row or not row[0]:
         return "Not found", 404
-    mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
-            "png": "image/png", "webp": "image/webp"}.get(path.suffix.lower().lstrip("."), "image/jpeg")
-    return send_file(path, mimetype=mime)
+    return jsonify({"url": row[0]})
 
+
+# ── Upload API — saves to Cloudinary, inserts row in PostgreSQL ────────────────
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
-    """Accept multipart image upload and save to the correct category folder."""
-    cat   = request.form.get("category", "")
-    files = request.files.getlist("images")
+    app.logger.info("Upload request received")
+    category = request.form.get("category", "unsorted")
+    files    = request.files.getlist("images")
+    app.logger.info(f"Category: {category} | Files: {len(files)}")
 
-    if cat not in CATEGORIES:
-        return jsonify({"error": f"Unknown category: {cat}"}), 400
+    if category not in CATEGORIES:
+        return jsonify({"status": "error", "message": f"Unknown category: {category}"}), 400
     if not files:
-        return jsonify({"error": "No files received"}), 400
+        return jsonify({"status": "error", "message": "No files received"}), 400
 
-    folder = CATEGORIES[cat]["folder"]
-    folder.mkdir(parents=True, exist_ok=True)
+    saved_urls = []
+    skipped    = []
 
-    saved, skipped = [], []
-    for f in files:
-        if not f.filename:
-            continue
-        safe = secure_filename(f.filename)
-        if Path(safe).suffix.lower() not in ALLOWED_EXT:
-            skipped.append(safe)
-            continue
-        dest = folder / safe
-        f.save(dest)
-        saved.append(safe)
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                for f in files:
+                    if not f or not f.filename:
+                        continue
+                    ext = "." + f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+                    if ext not in ALLOWED_EXT:
+                        skipped.append(f.filename)
+                        continue
 
-    return jsonify({"saved": saved, "skipped": skipped,
-                    "total_saved": len(saved), "folder": str(folder)})
+                    # Upload to Cloudinary
+                    result = cloudinary.uploader.upload(
+                        f,
+                        folder=f"biofield/{category}",
+                        resource_type="image",
+                    )
+                    url       = result["secure_url"]
+                    public_id = result["public_id"]
+                    app.logger.info(f"Cloudinary OK: {url}")
+
+                    # Insert a PENDING row in PostgreSQL
+                    cur.execute("""
+                        INSERT INTO observations
+                            (category, picture_name, cloudinary_url,
+                             cloudinary_public_id, processing_status)
+                        VALUES (%s, %s, %s, %s, 'PENDING')
+                        RETURNING id
+                    """, (category, f.filename, url, public_id))
+                    obs_id = cur.fetchone()[0]
+
+                    saved_urls.append({"url": url, "id": obs_id, "name": f.filename})
+
+            conn.commit()
+
+        return jsonify({
+            "status":      "success",
+            "total_saved": len(saved_urls),
+            "urls":        saved_urls,
+            "skipped":     skipped,
+            "message":     "Images uploaded to Cloudinary and registered in database.",
+        })
+
+    except Exception as e:
+        app.logger.error(f"Upload failed: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 # ── Pipeline API ───────────────────────────────────────────────────────────────
@@ -518,7 +587,13 @@ def api_logs(stream_id: str):
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
+# ── Startup ────────────────────────────────────────────────────────────────────
+
+with app.app_context():
+    try:
+        init_db()
+    except Exception as e:
+        app.logger.warning(f"DB init skipped (no DATABASE_URL?): {e}")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5050))

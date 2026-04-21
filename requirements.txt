@@ -1,17 +1,22 @@
-# BioField Dashboard — Python Dependencies
+flask>=3.0
+python-dotenv>=1.0
 
-# Core pipeline
-Pillow>=10.0.0
-requests>=2.31.0
-python-dotenv>=1.0.0
-rich>=13.0.0
+# Cloud storage & database
+cloudinary>=1.40
+psycopg2-binary>=2.9
 
-# Map generation (includes plugins: HeatMap, MarkerCluster, MiniMap)
-folium>=0.15.0
+# HTTP client (for downloading images from Cloudinary in extract.py)
+requests>=2.31
 
-# Flask web app
-flask>=3.0.0
+# EXIF metadata extraction
+piexif>=1.1.3
+Pillow>=10.0
+
+# AI pipeline
+openai>=1.0          # optional — only needed if you switch to OpenAI SDK
 
 # Excel export
-openpyxl>=3.1.0
-cloudinary
+openpyxl>=3.1
+
+# Map generation
+folium>=0.15

@@ -541,7 +541,7 @@
           if (item) { item.classList.remove('uploading'); item.classList.add('error'); document.getElementById('status-' + entry.id).textContent = '✕'; }
         }
       } else {
-        const saved   = data.saved   || [];
+        const saved   = data.urls  || [];
         const skipped = data.skipped || [];
         for (const [, entry] of pendingFiles) {
           const item = document.getElementById('prev-' + entry.id);

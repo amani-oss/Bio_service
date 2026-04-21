@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>{% block title %}BioField{% endblock %} — Field Observation Dashboard</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -40,15 +40,25 @@
       --radius-md: 8px;
       --radius-lg: 12px;
 
-      --sidebar-w: 220px;
-      --topbar-h:  56px;
-      --bottomnav-h: 60px;
-      --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+      --sidebar-w:    220px;
+      --topbar-h:     56px;
+      --bottomnav-h:  60px;
+      --transition:   200ms cubic-bezier(0.4, 0, 0.2, 1);
+
+      /* Safe area insets for notched phones (iPhone X+) */
+      --safe-top:    env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left:   env(safe-area-inset-left, 0px);
+      --safe-right:  env(safe-area-inset-right, 0px);
     }
 
     /* ── Reset ──────────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { font-size: 16px; scroll-behavior: smooth; }
+    html {
+      font-size: 16px;
+      scroll-behavior: smooth;
+      -webkit-text-size-adjust: 100%; /* prevent font inflation on rotate */
+    }
 
     body {
       font-family: var(--font-mono);
@@ -80,6 +90,8 @@
       top: 0; left: 0;
       z-index: 100;
       transition: transform var(--transition);
+      /* Safe area for sidebar on landscape phones */
+      padding-left: var(--safe-left);
     }
 
     .sidebar-brand {
@@ -128,7 +140,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 9px 10px;
+      padding: 11px 10px; /* increased from 9px for better touch */
       border-radius: var(--radius-sm);
       color: var(--text-1);
       text-decoration: none;
@@ -136,6 +148,8 @@
       font-weight: 400;
       transition: all var(--transition);
       position: relative;
+      min-height: 44px; /* WCAG touch target */
+      touch-action: manipulation;
     }
 
     .nav-link:hover  { color: var(--text-0); background: var(--bg-3); }
@@ -155,6 +169,7 @@
 
     .sidebar-footer {
       padding: 16px 20px;
+      padding-bottom: calc(16px + var(--safe-bottom));
       border-top: 1px solid var(--border-dim);
     }
     .version-tag { font-size: 0.65rem; color: var(--text-3); }
@@ -175,6 +190,7 @@
       display: flex;
       align-items: center;
       padding: 0 24px;
+      padding-top: var(--safe-top); /* notch support */
       gap: 12px;
       position: sticky;
       top: 0;
@@ -187,13 +203,14 @@
       flex-direction: column;
       justify-content: center;
       gap: 5px;
-      width: 36px; height: 36px;
+      width: 44px; height: 44px; /* proper touch target */
       padding: 6px;
       background: none;
       border: none;
       cursor: pointer;
       border-radius: var(--radius-sm);
       flex-shrink: 0;
+      touch-action: manipulation;
     }
     .hamburger:hover { background: var(--bg-3); }
     .hamburger span {
@@ -230,7 +247,8 @@
       display: none;
       align-items: center;
       gap: 6px;
-      padding: 6px 12px;
+      padding: 8px 14px;
+      min-height: 44px;
       border-radius: var(--radius-sm);
       background: var(--green-dim);
       color: var(--green);
@@ -240,6 +258,7 @@
       cursor: pointer;
       text-decoration: none;
       flex-shrink: 0;
+      touch-action: manipulation;
     }
 
     .page-content {
@@ -254,16 +273,18 @@
       display: none;
       position: fixed;
       bottom: 0; left: 0; right: 0;
-      height: var(--bottomnav-h);
+      /* height grows with safe area */
+      height: calc(var(--bottomnav-h) + var(--safe-bottom));
       background: var(--bg-1);
       border-top: 1px solid var(--border-dim);
       z-index: 90;
       padding: 0 4px;
+      padding-bottom: var(--safe-bottom);
     }
 
     .bottom-nav-inner {
       display: flex;
-      height: 100%;
+      height: var(--bottomnav-h);
       align-items: stretch;
     }
 
@@ -282,20 +303,21 @@
       transition: color var(--transition);
       border-radius: var(--radius-sm);
       padding: 6px 2px;
+      min-height: 44px;
+      touch-action: manipulation;
     }
 
     .bottom-nav-item.active  { color: var(--green); }
     .bottom-nav-item:hover   { color: var(--text-0); }
-
     .bottom-nav-icon { font-size: 1.3rem; line-height: 1; }
 
     /* Upload FAB on mobile */
     .upload-fab {
       display: none;
       position: fixed;
-      bottom: calc(var(--bottomnav-h) + 16px);
-      right: 16px;
-      width: 52px; height: 52px;
+      bottom: calc(var(--bottomnav-h) + var(--safe-bottom) + 16px);
+      right: calc(16px + var(--safe-right));
+      width: 56px; height: 56px;
       border-radius: 50%;
       background: var(--green);
       color: #000;
@@ -308,6 +330,7 @@
       text-decoration: none;
       align-items: center;
       justify-content: center;
+      touch-action: manipulation;
     }
     .upload-fab:active { transform: scale(0.92); }
 
@@ -376,8 +399,10 @@
     .btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
       padding: 9px 18px;
+      min-height: 44px; /* touch target */
       border-radius: var(--radius-sm);
       font-family: var(--font-mono);
       font-size: 0.78rem;
@@ -388,6 +413,7 @@
       text-decoration: none;
       letter-spacing: 0.04em;
       white-space: nowrap;
+      touch-action: manipulation;
     }
 
     .btn-primary { background: var(--green-dim); color: var(--green); border-color: #4ade8044; }
@@ -420,6 +446,12 @@
 
     .data-table tr:last-child td { border-bottom: none; }
     .data-table tr:hover td { background: var(--bg-2); color: var(--text-0); }
+
+    /* table wrapper: smooth horizontal scroll on mobile */
+    .table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
 
     /* ── Badges ──────────────────────────────────────────────────────────── */
     .badge {
@@ -458,6 +490,7 @@
       color: #6fcf6f; line-height: 1.7;
       height: 360px; overflow-y: auto;
       white-space: pre-wrap; word-break: break-all;
+      -webkit-overflow-scrolling: touch;
     }
 
     .terminal::-webkit-scrollbar { width: 4px; }
@@ -470,13 +503,22 @@
     .log-info  { color: #6fcf6f; }
 
     /* ── Filter Tabs ─────────────────────────────────────────────────────── */
-    .filter-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .filter-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
 
     .filter-tab {
-      padding: 7px 16px; border-radius: var(--radius-sm);
+      padding: 8px 16px;
+      min-height: 44px; /* touch target */
+      border-radius: var(--radius-sm);
       font-size: 0.75rem; cursor: pointer;
       transition: all var(--transition); text-decoration: none;
       border: 1px solid var(--border-dim); color: var(--text-1); background: transparent;
+      display: inline-flex; align-items: center;
+      touch-action: manipulation;
     }
 
     .filter-tab:hover  { border-color: var(--border); color: var(--text-0); background: var(--bg-2); }
@@ -516,32 +558,35 @@
     .progress-bar  { height: 3px; background: var(--border-dim); border-radius: 2px; overflow: hidden; margin-top: 8px; }
     .progress-fill { height: 100%; background: linear-gradient(90deg, var(--fill-color, var(--green)) 0%, transparent 100%); border-radius: 2px; transition: width 0.6s ease; }
 
-    /* ── Tablet breakpoint (768px) ───────────────────────────────────────── */
+    /* ── Tablet breakpoint (900px) ───────────────────────────────────────── */
     @media (max-width: 900px) {
-      .sidebar {
-        transform: translateX(-100%);
-      }
+      .sidebar { transform: translateX(-100%); }
       .sidebar.mobile-open {
         transform: translateX(0);
         box-shadow: 4px 0 32px rgba(0,0,0,0.5);
       }
-      .main-wrap {
-        margin-left: 0;
-      }
-      .hamburger {
-        display: flex;
-      }
-      .topbar {
-        padding: 0 16px;
-      }
-      .topbar-upload {
-        display: flex;
-      }
+      .main-wrap { margin-left: 0; }
+      .hamburger { display: flex; }
+      .topbar { padding: 0 16px; padding-top: var(--safe-top); }
+      .topbar-upload { display: flex; }
       .page-content {
-        padding: 20px 16px 80px; /* bottom padding for bottom nav */
+        padding: 20px 16px;
+        padding-bottom: calc(var(--bottomnav-h) + var(--safe-bottom) + 20px);
       }
       .bottom-nav  { display: flex; }
       .upload-fab  { display: flex; }
+
+      /* Filter tabs: scroll horizontally instead of wrapping */
+      .filter-tabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 6px;
+        /* hide scrollbar visually but keep functional */
+        scrollbar-width: none;
+      }
+      .filter-tabs::-webkit-scrollbar { display: none; }
+      .filter-tab { flex-shrink: 0; }
     }
 
     /* ── Phone breakpoint (480px) ────────────────────────────────────────── */
@@ -550,9 +595,28 @@
         grid-template-columns: 1fr 1fr;
         gap: 10px;
       }
+      .stat-card { padding: 14px; }
       .stat-value { font-size: 1.7rem; }
+      .stat-icon  { font-size: 1.2rem; margin-bottom: 6px; }
       .section-heading { font-size: 1.1rem; }
       .topbar-badge { display: none; }
+      .card-header { padding: 12px 16px; }
+      .card-body   { padding: 14px 16px; }
+      .terminal    { height: 280px; font-size: 0.68rem; }
+    }
+
+    /* ── Very small phones (360px) ───────────────────────────────────────── */
+    @media (max-width: 360px) {
+      .page-content { padding: 14px 12px; padding-bottom: calc(var(--bottomnav-h) + var(--safe-bottom) + 14px); }
+      .topbar { padding: 0 12px; padding-top: var(--safe-top); }
+      .stat-value { font-size: 1.5rem; }
+    }
+
+    /* ── Disable hover effects on touch devices ──────────────────────────── */
+    @media (hover: none) {
+      .stat-card:hover  { transform: none; }
+      .obs-card:hover   { transform: none; box-shadow: none; }
+      .nav-link:hover   { background: transparent; color: var(--text-1); }
     }
   </style>
 
@@ -676,6 +740,13 @@
       document.getElementById('sidebar').classList.remove('mobile-open');
       document.getElementById('sidebarBackdrop').classList.remove('open');
     }
+    // Swipe left to close sidebar
+    let touchStartX = 0;
+    document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+    document.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      if (dx < -60) closeSidebar(); // swipe left
+    }, { passive: true });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSidebar(); });
   </script>
 

@@ -103,6 +103,27 @@
     gap: 12px;
     align-items: flex-start;
   }
+
+  /* ── Tablet: stack the cards ────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .pipeline-grid {
+      grid-template-columns: 1fr;
+    }
+    .pipeline-card-header { padding: 16px; }
+    .pipeline-card-body   { padding: 16px; }
+  }
+
+  /* ── Phone ───────────────────────────────────────────────────────────── */
+  @media (max-width: 480px) {
+    .pipeline-card-title { font-size: 0.95rem; }
+    .pipeline-card-desc  { font-size: 0.7rem; }
+    .env-notice { font-size: 0.72rem; padding: 12px 14px; }
+    .info-key   { font-size: 0.65rem; }
+    .info-val   { font-size: 0.72rem; }
+    /* Run buttons: full width on phone */
+    .pipeline-card-body .btn { width: 100%; justify-content: center; }
+    .pipeline-card-body .flex { flex-direction: column; }
+  }
 </style>
 {% endblock %}
 
@@ -146,19 +167,19 @@
           <span class="info-val">extract.py</span>
         </div>
         <div class="info-row">
-          <span class="info-key">Images (insects)</span>
-          <span class="info-val">{{ stats.categories.insect.images_on_disk }}</span>
+          <span class="info-key">Insects</span>
+          <span class="info-val">{{ stats.categories.insect.images_on_disk }} images</span>
         </div>
         <div class="info-row">
-          <span class="info-key">Images (flora)</span>
-          <span class="info-val">{{ stats.categories.flora.images_on_disk }}</span>
+          <span class="info-key">Flora</span>
+          <span class="info-val">{{ stats.categories.flora.images_on_disk }} images</span>
         </div>
         <div class="info-row">
-          <span class="info-key">Images (fungi)</span>
-          <span class="info-val">{{ stats.categories.fungus.images_on_disk }}</span>
+          <span class="info-key">Fungi</span>
+          <span class="info-val">{{ stats.categories.fungus.images_on_disk }} images</span>
         </div>
         <div class="info-row">
-          <span class="info-key">Already processed</span>
+          <span class="info-key">Processed</span>
           <span class="info-val">{{ stats.db_processed }}</span>
         </div>
       </div>
@@ -222,7 +243,7 @@
     <span class="card-title">Live Output</span>
     <div class="flex gap-2 items-center">
       <span class="log-status idle" id="logStatus">Idle</span>
-      <button class="btn btn-ghost" onclick="clearLog()" style="padding: 4px 10px; font-size: 0.68rem;">Clear</button>
+      <button class="btn btn-ghost" onclick="clearLog()" style="padding: 4px 10px; font-size: 0.68rem; min-height: 36px;">Clear</button>
     </div>
   </div>
   <div class="card-body">
@@ -327,7 +348,6 @@
     setStatus(status);
     setBtnDisabled(false);
     document.getElementById(card).classList.remove('running');
-    // Refresh page stats after 1.5s
     setTimeout(() => location.reload(), 1500);
   }
 </script>

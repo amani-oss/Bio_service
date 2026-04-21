@@ -4,22 +4,98 @@
 
 {% block extra_styles %}
 <style>
-  .toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .obs-toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
   .search-bar {
-    flex: 1; min-width: 200px;
+    flex: 1; min-width: 160px;
     background: var(--bg-2); border: 1px solid var(--border-dim);
-    border-radius: var(--radius-sm); padding: 8px 14px;
+    border-radius: var(--radius-sm); padding: 10px 14px;
     font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-0);
     outline: none; transition: border-color var(--transition);
+    min-height: 44px;
   }
   .search-bar:focus { border-color: var(--green); }
   .search-bar::placeholder { color: var(--text-3); }
-  .table-wrap { overflow-x: auto; }
-  .pic-name { color: var(--text-0); font-size: 0.75rem; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Page header */
+  .obs-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .obs-page-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  .pic-name { color: var(--text-0); font-size: 0.75rem; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .coord-link { color: var(--text-3); text-decoration: none; font-size: 0.68rem; }
   .coord-link:hover { color: var(--green); }
 
-  /* Upload zone */
+  /* Lightbox */
+  .lightbox-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+    z-index: 1000; display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+    padding: 20px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+  .lightbox-overlay.open { display: flex; }
+  .lightbox-img { max-width: 90vw; max-height: 65vh; border-radius: var(--radius-lg); object-fit: contain; }
+  .lightbox-info {
+    background: var(--bg-card); border: 1px solid var(--border-dim);
+    border-radius: var(--radius-md); padding: 14px 20px;
+    display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.78rem;
+    max-width: 90vw;
+  }
+  .lightbox-info span { color: var(--text-1); }
+  .lightbox-info b { color: var(--text-0); }
+  .lightbox-close {
+    position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: 20px;
+    background: var(--bg-card); border: 1px solid var(--border-dim); color: var(--text-0);
+    font-size: 1.2rem; cursor: pointer; opacity: 0.9;
+    border-radius: 50%; width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity var(--transition);
+  }
+  .lightbox-close:hover { opacity: 1; }
+  .img-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 0.7rem; color: var(--text-3); padding: 0;
+    text-decoration: underline; transition: color var(--transition);
+    min-height: 44px; display: inline-flex; align-items: center;
+    touch-action: manipulation;
+  }
+  .img-btn:hover { color: var(--green); }
+
+  /* Upload modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 900; display: none; align-items: flex-end; justify-content: center;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--bg-card); border: 1px solid var(--border-dim);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding: 28px; width: 100%; max-width: 520px;
+  }
+  .modal-title { font-family: var(--font-serif); font-size: 1.1rem; margin-bottom: 16px; color: var(--text-0); }
+  .modal-close { float: right; background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 1.2rem; min-height: 44px; min-width: 44px; }
+  .upload-result { font-size: 0.78rem; color: var(--green); margin-top: 12px; min-height: 20px; }
+  .cat-select {
+    width: 100%; background: var(--bg-2); border: 1px solid var(--border-dim);
+    border-radius: var(--radius-sm); padding: 10px 12px; min-height: 44px;
+    font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-0);
+    outline: none; margin-bottom: 14px;
+  }
+
+  /* Upload drop zone */
   .upload-zone {
     border: 2px dashed var(--border);
     border-radius: var(--radius-lg);
@@ -30,75 +106,59 @@
     margin-bottom: 20px;
   }
   .upload-zone:hover, .upload-zone.drag-over {
-    border-color: var(--green);
-    background: var(--green-dim);
+    border-color: var(--green); background: var(--green-dim);
   }
   .upload-zone-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
   .upload-zone-text { font-size: 0.8rem; color: var(--text-1); }
 
-  /* Lightbox */
-  .lightbox-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.9);
-    z-index: 1000; display: none; align-items: center; justify-content: center;
-    flex-direction: column; gap: 16px; padding: 20px;
-  }
-  .lightbox-overlay.open { display: flex; }
-  .lightbox-img { max-width: 90vw; max-height: 75vh; border-radius: var(--radius-lg); object-fit: contain; }
-  .lightbox-info {
-    background: var(--bg-card); border: 1px solid var(--border-dim);
-    border-radius: var(--radius-md); padding: 14px 20px;
-    display: flex; gap: 24px; flex-wrap: wrap; font-size: 0.78rem;
-  }
-  .lightbox-info span { color: var(--text-1); }
-  .lightbox-info b { color: var(--text-0); }
-  .lightbox-close {
-    position: fixed; top: 20px; right: 24px;
-    background: none; border: none; color: var(--text-0);
-    font-size: 1.6rem; cursor: pointer; opacity: 0.7;
-    transition: opacity var(--transition);
-  }
-  .lightbox-close:hover { opacity: 1; }
-  .img-btn {
-    background: none; border: none; cursor: pointer;
-    font-size: 0.7rem; color: var(--text-3); padding: 0;
-    text-decoration: underline; transition: color var(--transition);
-  }
-  .img-btn:hover { color: var(--green); }
+  /* ── Tablet ──────────────────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    /* Hide lower-priority columns in the table */
+    .data-table .col-alt,
+    .data-table th.col-alt { display: none; }
 
-  /* Upload modal */
-  .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-    z-index: 900; display: none; align-items: center; justify-content: center;
+    .obs-page-actions .btn-secondary-hide { display: none; }
   }
-  .modal-overlay.open { display: flex; }
-  .modal-box {
-    background: var(--bg-card); border: 1px solid var(--border-dim);
-    border-radius: var(--radius-lg); padding: 28px; width: 100%; max-width: 480px;
+
+  /* ── Phone ───────────────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    .obs-page-header { flex-direction: column; align-items: stretch; }
+    .obs-page-actions { justify-content: flex-start; }
+    /* On phone, hide export buttons — accessible from bottom nav */
+    .obs-page-actions .btn-export-hide { display: none; }
+
+    /* Table: hide less-essential columns */
+    .data-table .col-sci,
+    .data-table th.col-sci,
+    .data-table .col-status,
+    .data-table th.col-status { display: none; }
+
+    .lightbox-info { flex-direction: column; gap: 8px; }
+    .modal-box { padding: 20px; }
+    .upload-zone { padding: 20px; }
   }
-  .modal-title { font-family: var(--font-serif); font-size: 1.1rem; margin-bottom: 16px; color: var(--text-0); }
-  .modal-close { float: right; background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 1.2rem; }
-  .upload-result { font-size: 0.78rem; color: var(--green); margin-top: 12px; min-height: 20px; }
-  .cat-select {
-    width: 100%; background: var(--bg-2); border: 1px solid var(--border-dim);
-    border-radius: var(--radius-sm); padding: 8px 12px;
-    font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-0);
-    outline: none; margin-bottom: 14px;
+
+  @media (max-width: 480px) {
+    /* Keep only: image, category, species, GPS */
+    .data-table .col-date,
+    .data-table th.col-date { display: none; }
+    .pic-name { max-width: 90px; }
   }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<div class="flex items-center justify-between mb-4" style="margin-bottom:20px">
+<div class="obs-page-header">
   <div>
     <h2 class="section-heading">Observations</h2>
     <p class="section-sub" style="margin-bottom:0">{{ total }} record{{ 's' if total != 1 }}</p>
   </div>
-  <div class="flex gap-2">
-    <button class="btn btn-ghost" onclick="openUploadModal()">↑ Upload Images</button>
-    <a href="/api/export-csv?category={{ active }}" class="btn btn-ghost">↓ CSV</a>
-    <a href="/api/export-excel?category={{ active }}" class="btn btn-ghost">↓ Excel</a>
-    <a href="/pipeline" class="btn btn-primary">▷ Run Pipeline</a>
+  <div class="obs-page-actions">
+    <button class="btn btn-ghost" onclick="openUploadModal()">↑ Upload</button>
+    <a href="/api/export-csv?category={{ active }}"   class="btn btn-ghost btn-export-hide">↓ CSV</a>
+    <a href="/api/export-excel?category={{ active }}" class="btn btn-ghost btn-export-hide">↓ Excel</a>
+    <a href="/pipeline" class="btn btn-primary">▷ Pipeline</a>
   </div>
 </div>
 
@@ -113,9 +173,9 @@
 </div>
 
 <!-- Toolbar -->
-<div class="toolbar">
+<div class="obs-toolbar">
   <input type="text" class="search-bar" id="searchInput" placeholder="Search species, filename…" />
-  <a href="/api/backup" class="btn btn-ghost" title="Download ZIP backup of all CSVs + DB">💾 Backup</a>
+  <a href="/api/backup" class="btn btn-ghost btn-secondary-hide" title="Download ZIP backup">💾 Backup</a>
 </div>
 
 {% if observations %}
@@ -128,11 +188,11 @@
           <th>Category</th>
           <th>Picture</th>
           <th>Species (Common)</th>
-          <th>Scientific Name</th>
-          <th>Date</th>
+          <th class="col-sci">Scientific Name</th>
+          <th class="col-date">Date</th>
           <th>GPS</th>
-          <th>Alt (m)</th>
-          <th>Status</th>
+          <th class="col-alt">Alt (m)</th>
+          <th class="col-status">Status</th>
         </tr>
       </thead>
       <tbody>
@@ -162,21 +222,21 @@
           </td>
           <td class="pic-name" title="{{ obs.get('picture_name','') }}">{{ obs.get('picture_name','—') }}</td>
           <td style="color:var(--text-0);font-weight:500;">{{ obs.get('common_name', obs.get('species_name','—')) or '—' }}</td>
-          <td style="font-style:italic;color:var(--text-2);font-size:0.73rem;">{{ obs.get('scientific_name','—') or '—' }}</td>
-          <td>{{ obs.get('date','—') }}</td>
+          <td class="col-sci" style="font-style:italic;color:var(--text-2);font-size:0.73rem;">{{ obs.get('scientific_name','—') or '—' }}</td>
+          <td class="col-date">{{ obs.get('date','—') }}</td>
           <td>
             {% set lat = obs.get('latitude_dd','') %}
             {% set lon = obs.get('longitude_dd','') %}
             {% if lat and lon and lat != '' and lon != '' %}
-            <a class="coord-link" href="https://www.google.com/maps?q={{ lat }},{{ lon }}" target="_blank">
+            <a class="coord-link" href="https://www.google.com/maps?q={{ lat }},{{ lon }}" target="_blank" rel="noopener">
               📍 {{ '%.4f'|format(lat|float) }}, {{ '%.4f'|format(lon|float) }}
             </a>
             {% else %}
-            <span style="color:var(--text-3);font-size:0.68rem">No GPS</span>
+            <span style="color:var(--text-3);font-size:0.68rem">—</span>
             {% endif %}
           </td>
-          <td style="color:var(--text-2);">{{ obs.get('altitude_m', obs.get('altitude','')) or '—' }}</td>
-          <td>
+          <td class="col-alt" style="color:var(--text-2);">{{ obs.get('altitude_m', obs.get('altitude','')) or '—' }}</td>
+          <td class="col-status">
             {% set st = obs.get('processing_status','') %}
             <span class="status-dot {% if st=='SUCCESS' %}status-success{% elif st in ('AI_FAILED','EXIF_ERROR','CIRCUIT_BREAK') %}status-failed{% else %}status-partial{% endif %}"></span>
             <span style="font-size:0.65rem;color:var(--text-3);margin-left:4px">{{ st or '—' }}</span>
@@ -202,7 +262,7 @@
   <div class="lightbox-info" id="lightboxInfo"></div>
 </div>
 
-<!-- Upload Modal -->
+<!-- Upload Modal (bottom sheet on mobile) -->
 <div class="modal-overlay" id="uploadModal" onclick="closeUploadIfBg(event)">
   <div class="modal-box">
     <button class="modal-close" onclick="closeUploadModal()">✕</button>
@@ -216,7 +276,7 @@
 
     <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
       <span class="upload-zone-icon">📂</span>
-      <div class="upload-zone-text">Click or drag & drop images here<br>
+      <div class="upload-zone-text">Tap to select or drag & drop images<br>
         <span style="font-size:0.65rem;color:var(--text-3)">.jpg · .jpeg · .png · .webp</span>
       </div>
     </div>
@@ -225,7 +285,7 @@
     <div class="upload-result" id="uploadResult"></div>
 
     <div class="flex gap-2" style="margin-top:16px">
-      <button class="btn btn-primary" onclick="doUpload()" id="uploadBtn">↑ Upload</button>
+      <button class="btn btn-primary" onclick="doUpload()" id="uploadBtn" style="flex:1;justify-content:center">↑ Upload</button>
       <button class="btn btn-ghost" onclick="closeUploadModal()">Cancel</button>
     </div>
   </div>
@@ -271,8 +331,8 @@
   // ── Upload Modal ──
   let pendingFiles = null;
 
-  function openUploadModal()  { document.getElementById('uploadModal').classList.add('open'); }
-  function closeUploadModal() { document.getElementById('uploadModal').classList.remove('open'); pendingFiles = null; document.getElementById('uploadResult').textContent = ''; }
+  function openUploadModal()  { document.getElementById('uploadModal').classList.add('open'); document.body.style.overflow = 'hidden'; }
+  function closeUploadModal() { document.getElementById('uploadModal').classList.remove('open'); document.body.style.overflow = ''; pendingFiles = null; document.getElementById('uploadResult').textContent = ''; }
   function closeUploadIfBg(e) { if (e.target.id === 'uploadModal') closeUploadModal(); }
 
   function handleFiles(files) {
@@ -281,7 +341,6 @@
     document.getElementById('uploadResult').style.color = 'var(--amber)';
   }
 
-  // Drag & drop
   const zone = document.getElementById('uploadZone');
   zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
   zone.addEventListener('dragleave', ()  => zone.classList.remove('drag-over'));
@@ -312,7 +371,7 @@
         document.getElementById('uploadResult').style.color = 'var(--red)';
       } else {
         document.getElementById('uploadResult').innerHTML =
-          `<span style="color:var(--green)">✓ Saved ${data.total_saved} file(s) to ${data.folder}</span>` +
+          `<span style="color:var(--green)">✓ Saved ${data.total_saved} file(s)</span>` +
           (data.skipped.length ? `<br><span style="color:var(--amber)">Skipped: ${data.skipped.join(', ')}</span>` : '');
       }
     } catch(e) {

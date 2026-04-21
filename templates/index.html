@@ -7,7 +7,7 @@
 <style>
   .recent-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 16px;
   }
 
@@ -105,6 +105,7 @@
     text-decoration: none;
     display: block;
     transition: all var(--transition);
+    touch-action: manipulation;
   }
   .map-preview-cta:hover {
     border-color: var(--green);
@@ -114,11 +115,42 @@
   .map-preview-cta-text { font-size: 0.85rem; color: var(--text-1); }
   .map-preview-cta:hover .map-preview-cta-text { color: var(--green); }
 
+  /* Two-column layout: collapses to single column on tablet/phone */
   .two-col {
     display: grid;
     grid-template-columns: 1fr 320px;
     gap: 24px;
     margin-bottom: 28px;
+  }
+
+  /* ── Tablet: stack the two columns ──────────────────────────────────── */
+  @media (max-width: 900px) {
+    .two-col {
+      grid-template-columns: 1fr;
+    }
+    /* On mobile the right col (sidebar cards) moves above recent obs */
+    .two-col > div:last-child {
+      order: -1;
+    }
+    /* Quick Actions: show as 2x2 grid for easier tapping */
+    .two-col > div:last-child .card:last-child .card-body {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+  }
+
+  /* ── Phone: single column cards ─────────────────────────────────────── */
+  @media (max-width: 480px) {
+    .recent-grid {
+      grid-template-columns: 1fr;
+    }
+    .obs-card {
+      padding: 14px;
+    }
+    .map-preview-cta {
+      padding: 20px;
+    }
   }
 </style>
 {% endblock %}
@@ -265,7 +297,7 @@
         <span class="card-title">Quick Actions</span>
       </div>
       <div class="card-body" style="display: flex; flex-direction: column; gap: 10px;">
-        <a href="/upload" class="btn btn-primary" style="justify-content: center; background-color: var(--green);">↑ Upload Images</a>
+        <a href="/upload" class="btn btn-primary" style="justify-content: center; background-color: var(--green); color: #000;">↑ Upload Images</a>
         <a href="/pipeline" class="btn btn-primary" style="justify-content: center;">▷ Run Pipeline</a>
         <a href="/observations" class="btn btn-ghost" style="justify-content: center;">≡ Browse Data</a>
         <a href="/map" class="btn btn-ghost" style="justify-content: center;">◎ View Map</a>

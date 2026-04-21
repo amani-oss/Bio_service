@@ -21,6 +21,12 @@
     cursor: pointer;
     transition: all var(--transition);
     user-select: none;
+    min-height: 90px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
   }
 
   .cat-card:hover { border-color: var(--border); background: var(--bg-2); }
@@ -31,8 +37,8 @@
     box-shadow: 0 0 0 1px var(--cat-color, var(--green));
   }
 
-  .cat-card-icon { font-size: 2.2rem; display: block; margin-bottom: 8px; }
-  .cat-card-name { font-size: 0.8rem; font-weight: 500; color: var(--text-0); }
+  .cat-card-icon  { font-size: 2.2rem; display: block; margin-bottom: 8px; }
+  .cat-card-name  { font-size: 0.8rem; font-weight: 500; color: var(--text-0); }
   .cat-card-count { font-size: 0.65rem; color: var(--text-3); margin-top: 3px; }
 
   /* ── Drop Zone ─────────────────────────────────────────────────────── */
@@ -45,6 +51,7 @@
     transition: all var(--transition);
     background: var(--bg-card);
     position: relative;
+    touch-action: manipulation;
   }
 
   .drop-zone:hover, .drop-zone.drag-over {
@@ -52,9 +59,9 @@
     background: var(--green-dim);
   }
 
-  .drop-zone-icon { font-size: 3rem; display: block; margin-bottom: 12px; }
+  .drop-zone-icon  { font-size: 3rem; display: block; margin-bottom: 12px; }
   .drop-zone-title { font-family: var(--font-serif); font-size: 1.1rem; color: var(--text-0); margin-bottom: 6px; }
-  .drop-zone-sub { font-size: 0.78rem; color: var(--text-2); }
+  .drop-zone-sub   { font-size: 0.78rem; color: var(--text-2); }
 
   /* ── Action Buttons ────────────────────────────────────────────────── */
   .action-row {
@@ -71,17 +78,20 @@
     justify-content: center;
     gap: 8px;
     padding: 22px 16px;
+    min-height: 100px; /* generous touch area */
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-dim);
     background: var(--bg-card);
     cursor: pointer;
     transition: all var(--transition);
     font-family: var(--font-mono);
+    touch-action: manipulation;
   }
 
-  .action-btn:hover { border-color: var(--border); background: var(--bg-2); }
+  .action-btn:hover  { border-color: var(--border); background: var(--bg-2); }
+  .action-btn:active { transform: scale(0.97); }
 
-  .action-btn-icon { font-size: 2rem; }
+  .action-btn-icon  { font-size: 2rem; }
   .action-btn-label { font-size: 0.8rem; color: var(--text-0); font-weight: 500; }
   .action-btn-sub   { font-size: 0.68rem; color: var(--text-2); }
 
@@ -94,8 +104,8 @@
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 12px;
   }
-  .preview-title  { font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-2); }
-  .preview-count  { font-size: 0.72rem; color: var(--text-3); }
+  .preview-title { font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-2); }
+  .preview-count { font-size: 0.72rem; color: var(--text-3); }
 
   .preview-grid {
     display: grid;
@@ -132,7 +142,7 @@
 
   .preview-remove {
     position: absolute; top: 4px; right: 4px;
-    width: 22px; height: 22px;
+    width: 28px; height: 28px; /* bigger touch target */
     background: rgba(0,0,0,0.7);
     border: none; border-radius: 50%;
     color: var(--text-1);
@@ -140,7 +150,7 @@
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: background var(--transition);
-    line-height: 1;
+    touch-action: manipulation;
   }
   .preview-remove:hover { background: var(--red); color: #fff; }
 
@@ -157,11 +167,7 @@
   .preview-item.error     .preview-status { opacity: 1; }
 
   /* ── Progress + Status ─────────────────────────────────────────────── */
-  .upload-progress {
-    margin-top: 20px;
-    display: none;
-  }
-
+  .upload-progress { margin-top: 20px; display: none; }
   .upload-progress.visible { display: block; }
 
   .progress-track {
@@ -203,8 +209,9 @@
   .btn-upload {
     flex: 1;
     justify-content: center;
-    padding: 14px;
-    font-size: 0.9rem;
+    padding: 16px;
+    font-size: 0.95rem;
+    min-height: 52px;
   }
 
   /* ── Tips box ──────────────────────────────────────────────────────── */
@@ -245,17 +252,27 @@
   }
 
   /* ── Mobile overrides ──────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    /* On mobile, show camera button more prominently */
+    .action-btn.camera-btn {
+      background: var(--green-dim);
+      border-color: var(--green);
+    }
+  }
+
   @media (max-width: 480px) {
-    .cat-cards       { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .cat-card        { padding: 14px 6px; }
-    .cat-card-icon   { font-size: 1.8rem; margin-bottom: 4px; }
-    .cat-card-name   { font-size: 0.72rem; }
-    .action-row      { grid-template-columns: 1fr 1fr; gap: 10px; }
-    .action-btn      { padding: 18px 10px; }
-    .action-btn-icon { font-size: 1.6rem; }
-    .drop-zone       { padding: 32px 16px; }
-    .preview-grid    { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
-    .btn-upload      { padding: 16px; font-size: 1rem; }
+    .cat-cards     { gap: 8px; }
+    .cat-card      { padding: 14px 6px; min-height: 80px; }
+    .cat-card-icon { font-size: 1.8rem; margin-bottom: 4px; }
+    .cat-card-name { font-size: 0.72rem; }
+    .action-btn    { padding: 20px 10px; }
+    .action-btn-icon { font-size: 1.8rem; }
+    .drop-zone     { padding: 32px 16px; }
+    /* On small phones, hide the drop zone (use buttons instead) */
+    .drop-zone-on-desktop { display: none; }
+    .preview-grid  { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+    .btn-upload    { padding: 16px; font-size: 1rem; min-height: 54px; }
+    .tips-list li  { font-size: 0.72rem; }
   }
 </style>
 {% endblock %}
@@ -318,8 +335,8 @@
     <input type="file" id="cameraInput" accept="image/*" capture="environment" multiple style="display:none" onchange="addFiles(this.files)" />
     <input type="file" id="fileInput"   accept=".jpg,.jpeg,.png,.webp" multiple style="display:none" onchange="addFiles(this.files)" />
 
-    <!-- Drop Zone (desktop) -->
-    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <!-- Drop Zone (desktop only — hidden on small phone) -->
+    <div class="drop-zone drop-zone-on-desktop" id="dropZone" onclick="document.getElementById('fileInput').click()">
       <span class="drop-zone-icon">📂</span>
       <div class="drop-zone-title">Drag & drop images here</div>
       <div class="drop-zone-sub">.jpg · .jpeg · .png · .webp · max 50 MB per file</div>
@@ -331,7 +348,7 @@
         <span class="preview-title">Preview</span>
         <div class="flex gap-2">
           <span class="preview-count" id="previewCount"></span>
-          <button class="btn btn-ghost" style="padding:4px 10px;font-size:0.68rem" onclick="clearAll()">Clear all</button>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:0.68rem;min-height:36px" onclick="clearAll()">Clear all</button>
         </div>
       </div>
       <div class="preview-grid" id="previewGrid"></div>
@@ -376,7 +393,7 @@
 <script>
   // ── State ──────────────────────────────────────────────────────────────
   let selectedCat  = '{{ categories.keys()|list|first }}';
-  let pendingFiles = new Map(); // name → File
+  let pendingFiles = new Map();
   let fileIdSeq    = 0;
 
   // ── Category selection ─────────────────────────────────────────────────
@@ -413,8 +430,8 @@
     section.style.display = 'block';
 
     const item = document.createElement('div');
-    item.className  = 'preview-item';
-    item.id         = 'prev-' + id;
+    item.className    = 'preview-item';
+    item.id           = 'prev-' + id;
     item.dataset.name = file.name;
 
     const img = document.createElement('img');
@@ -469,12 +486,14 @@
 
   // ── Drag & drop ────────────────────────────────────────────────────────
   const zone = document.getElementById('dropZone');
-  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
-  zone.addEventListener('dragleave', ()  => zone.classList.remove('drag-over'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault(); zone.classList.remove('drag-over');
-    addFiles(e.dataTransfer.files);
-  });
+  if (zone) {
+    zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', ()  => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      addFiles(e.dataTransfer.files);
+    });
+  }
 
   // ── Upload ─────────────────────────────────────────────────────────────
   async function doUpload() {
@@ -492,13 +511,11 @@
     const status   = document.getElementById('statusText');
     progress.classList.add('visible');
 
-    // Mark all as uploading
     for (const [, entry] of pendingFiles) {
       const item = document.getElementById('prev-' + entry.id);
       if (item) { item.classList.add('uploading'); document.getElementById('status-' + entry.id).textContent = '⏳'; }
     }
 
-    // Build FormData
     const fd = new FormData();
     fd.append('category', selectedCat);
     let i = 0;
@@ -524,7 +541,7 @@
           if (item) { item.classList.remove('uploading'); item.classList.add('error'); document.getElementById('status-' + entry.id).textContent = '✕'; }
         }
       } else {
-        const saved   = data.saved || [];
+        const saved   = data.saved   || [];
         const skipped = data.skipped || [];
         for (const [, entry] of pendingFiles) {
           const item = document.getElementById('prev-' + entry.id);
@@ -534,9 +551,9 @@
           item.classList.add(isSaved ? 'done' : 'error');
           document.getElementById('status-' + entry.id).textContent = isSaved ? '✓' : '✕';
         }
-        let msg = `✓ Saved ${data.total_saved} image${data.total_saved !== 1 ? 's' : ''} to <strong>${selectedCat}</strong> folder.`;
+        let msg = `✓ Saved ${data.total_saved} image${data.total_saved !== 1 ? 's' : ''} to <strong>${selectedCat}</strong>.`;
         if (skipped.length) msg += `<br>Skipped ${skipped.length} file(s) (unsupported format).`;
-        msg += `<br><br>Next step: <a href="/pipeline" style="color:var(--green)">Run the pipeline</a> to process them.`;
+        msg += `<br><br>Next: <a href="/pipeline" style="color:var(--green)">Run the pipeline →</a>`;
         showResult('success', msg);
         status.textContent = 'Done!';
       }

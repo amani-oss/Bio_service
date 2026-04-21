@@ -76,18 +76,57 @@
     margin-bottom: 4px;
   }
   .kpi-label { font-size: 0.68rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.1em; }
+
+  /* Page header actions */
+  .analytics-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .analytics-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ── Tablet: collapse grids ──────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .analytics-grid {
+      grid-template-columns: 1fr;
+    }
+    .kpi-row {
+      grid-template-columns: 1fr 1fr;
+    }
+    .chart-wrap { height: 220px; }
+    .chart-wrap.tall { height: 260px; }
+  }
+
+  /* ── Phone ───────────────────────────────────────────────────────────── */
+  @media (max-width: 480px) {
+    .kpi-row {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .kpi-card { padding: 12px 14px; }
+    .kpi-value { font-size: 1.6rem; }
+    .kpi-label { font-size: 0.62rem; }
+    .chart-wrap { height: 180px; }
+    .chart-wrap.tall { height: 220px; }
+    .chart-card-header { padding: 12px 14px; }
+    .chart-card-body { padding: 14px; }
+    .analytics-header-actions .btn { padding: 8px 12px; font-size: 0.72rem; }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="flex items-center justify-between mb-4" style="margin-bottom:20px">
+<div class="analytics-header">
   <div>
     <h2 class="section-heading">Analytics</h2>
     <p class="section-sub" style="margin-bottom:0">
       {{ data.total }} total observations across all categories
     </p>
   </div>
-  <div class="flex gap-2">
+  <div class="analytics-header-actions">
     <a href="/api/export-csv" class="btn btn-ghost">↓ CSV</a>
     <a href="/api/export-excel" class="btn btn-ghost">↓ Excel</a>
   </div>
@@ -98,11 +137,11 @@
   {% set total_species = data.species_richness.values()|sum %}
   <div class="kpi-card" style="animation-delay:0ms">
     <div class="kpi-value">{{ data.total }}</div>
-    <div class="kpi-label">Total Observations</div>
+    <div class="kpi-label">Total Obs.</div>
   </div>
   <div class="kpi-card" style="animation-delay:60ms">
     <div class="kpi-value text-green">{{ total_species }}</div>
-    <div class="kpi-label">Unique Species</div>
+    <div class="kpi-label">Species</div>
   </div>
   <div class="kpi-card" style="animation-delay:120ms">
     <div class="kpi-value text-amber">{{ data.gps_coverage.get('With GPS', 0) }}</div>
@@ -112,7 +151,7 @@
     {% set success = data.status.get('SUCCESS', 0) %}
     {% set rate = ((success / data.total) * 100)|int if data.total > 0 else 0 %}
     <div class="kpi-value text-purple">{{ rate }}%</div>
-    <div class="kpi-label">AI Success Rate</div>
+    <div class="kpi-label">AI Success</div>
   </div>
 </div>
 
@@ -131,7 +170,7 @@
 
   <div class="chart-card" style="animation-delay:150ms">
     <div class="chart-card-header">
-      <span class="chart-card-title">🔬 Species Richness per Category</span>
+      <span class="chart-card-title">🔬 Species Richness</span>
     </div>
     <div class="chart-card-body">
       <div class="chart-wrap">
@@ -141,7 +180,7 @@
   </div>
 </div>
 
-<!-- Row 2: Status + GPS Coverage + Altitude -->
+<!-- Row 2: Status + GPS Coverage -->
 <div class="analytics-grid">
   <div class="chart-card" style="animation-delay:200ms">
     <div class="chart-card-header">
@@ -181,9 +220,9 @@
 
   <div class="chart-card" style="animation-delay:350ms">
     <div class="chart-card-header">
-      <span class="chart-card-title">🏆 Top 10 Most Observed Species</span>
+      <span class="chart-card-title">🏆 Top 10 Species</span>
     </div>
-    <div class="chart-card-body" style="overflow-y:auto; max-height:280px;">
+    <div class="chart-card-body" style="overflow-y:auto; max-height:280px; -webkit-overflow-scrolling:touch;">
       {% if data.top_species %}
       <div class="species-list">
         {% for name, count in data.top_species %}
@@ -204,7 +243,6 @@
 {% endblock %}
 
 {% block scripts %}
-{# ── Jinja2 data injected into JSON script tags — keeps JS linter clean ── #}
 <script type="application/json" id="d-timeline">{{ data.timeline | tojson }}</script>
 <script type="application/json" id="d-richness">{{ data.species_richness | tojson }}</script>
 <script type="application/json" id="d-status">{{ data.status | tojson }}</script>
@@ -213,7 +251,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-  // Helper: read data safely from JSON script tags
   function getChartData(id) {
     try { return JSON.parse(document.getElementById(id).textContent); }
     catch(e) { return {}; }
@@ -224,15 +261,15 @@
   Chart.defaults.font.family = "'IBM Plex Mono', monospace";
   Chart.defaults.font.size   = 11;
 
-  const GRID = { color: '#1d2a1f', lineWidth: 1 };
-  const TICKS = { color: '#6b8a6d' };
+  const GRID  = { color: '#1d2a1f', lineWidth: 1 };
+  const TICKS = { color: '#6b8a6d', maxTicksLimit: 6 };
 
   function baseOptions(legend) {
     return {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: !!legend, labels: { color: '#a8bfaa', boxWidth: 12, padding: 16 } },
+        legend: { display: !!legend, labels: { color: '#a8bfaa', boxWidth: 12, padding: 12 } },
         tooltip: {
           backgroundColor: '#0f1610',
           borderColor: '#2a3d2c',
@@ -257,10 +294,9 @@
           data: tlData.values,
           borderColor: '#4ade80',
           backgroundColor: '#4ade8022',
-          fill: true,
-          tension: 0.4,
+          fill: true, tension: 0.4,
           pointBackgroundColor: '#4ade80',
-          pointRadius: 4,
+          pointRadius: 3,
         }]
       },
       options: Object.assign(baseOptions(false), {
@@ -281,8 +317,7 @@
           data: Object.values(richData),
           backgroundColor: ['#f59e0b99', '#4ade8099', '#c084fc99'],
           borderColor: ['#f59e0b', '#4ade80', '#c084fc'],
-          borderWidth: 1,
-          borderRadius: 4,
+          borderWidth: 1, borderRadius: 4,
         }]
       },
       options: Object.assign(baseOptions(false), {
@@ -340,8 +375,7 @@
           data: Object.values(altData),
           backgroundColor: '#60a5fa66',
           borderColor: '#60a5fa',
-          borderWidth: 1,
-          borderRadius: 4,
+          borderWidth: 1, borderRadius: 4,
         }]
       },
       options: Object.assign(baseOptions(false), {

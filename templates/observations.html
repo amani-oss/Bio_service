@@ -201,15 +201,25 @@
         <tr class="obs-row"
             data-search="{{ (obs.get('common_name','') ~ ' ' ~ obs.get('scientific_name','') ~ ' ' ~ obs.get('picture_name','')).lower() }}">
           <td>
-            {% set pic = obs.get('picture_name','') %}
-            {% if pic %}
+            {% set cld_url = obs.get('cloudinary_url','') %}
+            {% if cld_url %}
+            {% set thumb = cld_url | replace('/upload/', '/upload/w_80,h_80,c_fill/') %}
             <button class="img-btn"
-              data-src="/api/image/{{ cat }}/{{ pic }}"
+              data-src="{{ cld_url }}"
               data-species="{{ obs.get('common_name', obs.get('species_name','')) | e }}"
               data-sci="{{ obs.get('scientific_name','') | e }}"
               data-date="{{ obs.get('date','') | e }}"
               data-gps="{{ obs.get('gps_string','') | e }}"
-              onclick="openLightboxFromBtn(this)">🖼 View</button>
+              onclick="openLightboxFromBtn(this)"
+              style="background:none;border:none;cursor:pointer;padding:0;">
+              <img src="{{ thumb }}"
+                   alt="{{ obs.get('common_name','photo') | e }}"
+                   loading="lazy"
+                   style="width:44px;height:44px;object-fit:cover;border-radius:6px;
+                          border:1px solid var(--border-dim);display:block;"
+                   onerror="this.style.display='none';this.nextSibling.style.display='inline'"/>
+              <span style="display:none;font-size:0.7rem;color:var(--green)">🖼 View</span>
+            </button>
             {% else %}
             <span style="color:var(--text-3);font-size:0.68rem">—</span>
             {% endif %}

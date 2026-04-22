@@ -1,179 +1,177 @@
 """
-map.py  —  Enhanced
-author: Dr. Hakim Mitiche  |  update: Feb. 2026
- 
-Generates an interactive Folium map from field observation CSVs.
-New in this version:
-  - MarkerCluster  (groups nearby markers, cleans up dense areas)
-  - HeatMap layer  (density visualisation, togglable)
-  - MiniMap        (overview in bottom-left corner)
-  - GeoJSON export (bio_observations.geojson sidecar file)
+map.py — BioField Field Map Generator  (v4 — Cloud Edition)
+author: Dr. Hakim Mitiche
+
+Reads all observations with GPS from PostgreSQL.
+Images displayed via Cloudinary URLs (no local files needed).
+Outputs bio_observations_map.html in the project directory.
 """
- 
-import base64
-import csv
-import json
+
+from __future__ import annotations
+
+import logging
 import os
-import re
-import sys
 from pathlib import Path
- 
+
 import folium
-from folium import FeatureGroup, LayerControl
-from folium.plugins import HeatMap, MarkerCluster, MiniMap
- 
-CATEGORIES = [
-    {"name": "Insect", "csv": "insecta_metadata.csv", "folder": "image/images_insects", "color": "red",    "icon": "bug"},
-    {"name": "Flora",  "csv": "flora_metadata.csv",   "folder": "image/images_flora",   "color": "green",  "icon": "leaf"},
-    {"name": "Fungus", "csv": "fungus_metadata.csv",  "folder": "image/images_fungus",  "color": "orange", "icon": "circle"},
-]
- 
-OUTPUT_MAP     = "bio_observations_map.html"
-OUTPUT_GEOJSON = "bio_observations.geojson"
- 
- 
-def dms_to_decimal(s: str):
-    m = re.search(r"(\d+)°\s*(\d+)'\s*([\d.]+)\"?\s*([NSEW])", s.strip())
-    if not m:
-        return None
-    d, mi, sec, ref = m.groups()
-    v = float(d) + float(mi) / 60 + float(sec) / 3600
-    return -v if ref in ("S", "W") else v
- 
- 
-def image_to_base64_tag(image_path: str, width: int = 200) -> str:
-    path = Path(image_path)
-    if not path.exists():
-        return "<i style='color:#999'>Image not found</i>"
-    mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-            ".gif": "image/gif", ".webp": "image/webp"}.get(path.suffix.lower(), "image/jpeg")
-    try:
-        b64 = base64.b64encode(path.read_bytes()).decode()
-        return f'<img src="data:{mime};base64,{b64}" width="{width}" style="border-radius:6px;margin-top:6px;">'
-    except OSError as e:
-        return f"<i style='color:#c00'>Error: {e}</i>"
- 
- 
-def load_locations(csv_file, image_folder, category):
-    locs = []
-    if not os.path.isfile(csv_file):
-        print(f"[warning] Missing CSV: {csv_file}")
-        return locs
-    with open(csv_file, newline="", encoding="utf-8") as f:
-        for i, row in enumerate(csv.DictReader(f)):
-            gps_raw = (row.get("gps_string") or row.get("GPS coordinates (DMS)") or "").replace('""', '"').strip()
-            if not gps_raw or gps_raw == "No GPS Data":
-                continue
-            parts = gps_raw.split(",", 1)
-            if len(parts) != 2:
-                continue
-            lat, lon = dms_to_decimal(parts[0]), dms_to_decimal(parts[1])
-            if lat is None or lon is None:
-                continue
-            locs.append({
-                "lat": lat, "lon": lon,
-                "picture_name":    row.get("picture_name", ""),
-                "date":            row.get("date", ""),
-                "hour":            row.get("hour", ""),
-                "altitude":        row.get("altitude_m") or row.get("altitude", ""),
-                "species_name":    row.get("common_name") or row.get("species_name", "Unknown"),
-                "scientific_name": row.get("scientific_name", ""),
-                "confidence":      row.get("confidence_rate", ""),
-                "note":            row.get("note", ""),
-                "image_path":      os.path.join(image_folder, row.get("picture_name", "")),
-                "category":        category,
-            })
-    print(f"[info] Loaded {len(locs)} {category} points")
-    return locs
- 
- 
-def build_popup(loc):
-    sci  = f"<i>({loc['scientific_name']})</i>" if loc["scientific_name"] else ""
-    conf = f"<b>Confidence:</b> {loc['confidence']}<br>" if loc["confidence"] else ""
-    alt  = f"<b>Altitude:</b> {loc['altitude']} m<br>" if loc["altitude"] else ""
-    img  = image_to_base64_tag(loc["image_path"])
-    html = f"""
-    <div style="font-family:sans-serif;font-size:13px;max-width:260px;">
-      <b style="font-size:14px;">{loc['picture_name']}</b><br>
-      <span style="color:#555">{loc['category']}</span><br><br>
-      <b>Species:</b> <span style="color:#2a7a2a">{loc['species_name']}</span> {sci}<br>
-      {conf}<b>Date:</b> {loc['date']} {loc['hour']}<br>
-      <b>Lat/Lon:</b> {loc['lat']:.6f}, {loc['lon']:.6f}<br>{alt}{img}
-    </div>"""
-    return folium.Popup(folium.Html(html, script=True), max_width=300)
- 
- 
-def export_geojson(all_locs, path):
-    features = [{
-        "type": "Feature",
-        "geometry": {"type": "Point", "coordinates": [l["lon"], l["lat"]]},
-        "properties": {k: l[k] for k in ("picture_name","category","species_name",
-                                          "scientific_name","date","hour","altitude","confidence")},
-    } for l in all_locs]
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump({"type": "FeatureCollection", "features": features}, f, ensure_ascii=False, indent=2)
-    print(f"[info] GeoJSON saved -> {path}")
- 
- 
-def main():
-    print("[info] Loading datasets...")
-    all_locs = []
-    for cat in CATEGORIES:
-        pts = load_locations(cat["csv"], cat["folder"], cat["name"])
-        for p in pts:
-            p["color"] = cat["color"]
-            p["icon"]  = cat["icon"]
-        all_locs.extend(pts)
- 
-    if not all_locs:
-        print("[ERROR] No valid GPS points found.")
-        sys.exit(1)
- 
-    clat = sum(p["lat"] for p in all_locs) / len(all_locs)
-    clon = sum(p["lon"] for p in all_locs) / len(all_locs)
-    print(f"[info] Center: {clat:.5f}, {clon:.5f}  |  Total: {len(all_locs)}")
- 
-    # Base map
-    m = folium.Map(location=[clat, clon], zoom_start=15, tiles="OpenStreetMap")
+import folium.plugins
+import psycopg2
+import psycopg2.extras
+from dotenv import load_dotenv
+
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger(__name__)
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+BASE_DIR     = Path(__file__).parent
+OUTPUT_FILE  = BASE_DIR / "bio_observations_map.html"
+
+CATEGORY_COLORS = {
+    "insect": "#ef4444",
+    "flora":  "#22c55e",
+    "fungus": "#f97316",
+}
+
+
+def get_gps_observations() -> list[dict]:
+    """Return all observations that have valid GPS coordinates."""
+    conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT id, category, picture_name, cloudinary_url,
+                   common_name, scientific_name,
+                   date, gps_string, latitude_dd, longitude_dd, altitude_m,
+                   processing_status
+            FROM observations
+            WHERE latitude_dd IS NOT NULL
+              AND longitude_dd IS NOT NULL
+              AND latitude_dd != 0
+              AND longitude_dd != 0
+            ORDER BY created_at DESC
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def make_popup(obs: dict) -> str:
+    """Build HTML popup for a map marker."""
+    name      = obs.get("common_name") or obs.get("picture_name") or "Unknown"
+    sci       = obs.get("scientific_name") or ""
+    date      = obs.get("date") or "—"
+    alt       = obs.get("altitude_m")
+    cat       = obs.get("category", "")
+    img_url   = obs.get("cloudinary_url") or ""
+    color     = CATEGORY_COLORS.get(cat, "#888")
+
+    img_html = ""
+    if img_url:
+        # Request a thumbnail from Cloudinary (w_300 transformation)
+        thumb_url = img_url.replace("/upload/", "/upload/w_300,c_fill/")
+        img_html = f'<img src="{thumb_url}" style="width:100%;border-radius:6px;margin-bottom:8px">'
+
+    alt_html = f"<div style='font-size:0.75rem;color:#888'>⛰ {alt} m</div>" if alt else ""
+
+    return f"""
+    <div style="font-family:sans-serif;min-width:220px;max-width:280px">
+      {img_html}
+      <div style="font-weight:600;font-size:0.95rem;color:#1a1a1a">{name}</div>
+      <div style="font-style:italic;font-size:0.78rem;color:#555;margin-bottom:4px">{sci}</div>
+      <div style="display:inline-block;background:{color}22;color:{color};
+                  border:1px solid {color}55;border-radius:20px;
+                  padding:1px 8px;font-size:0.68rem;margin-bottom:6px">
+        {cat.capitalize()}
+      </div>
+      <div style="font-size:0.75rem;color:#888">📅 {date}</div>
+      {alt_html}
+    </div>
+    """
+
+
+def generate_map(rows: list[dict]):
+    # Centre map on average of all points
+    avg_lat = sum(r["latitude_dd"] for r in rows) / len(rows)
+    avg_lon = sum(r["longitude_dd"] for r in rows) / len(rows)
+
+    m = folium.Map(
+        location=[avg_lat, avg_lon],
+        zoom_start=10,
+        tiles="OpenStreetMap",
+    )
+
+    # Satellite layer toggle
     folium.TileLayer(
         tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        attr="Esri", name="Satellite",
+        attr="Esri", name="Satellite", overlay=False, control=True,
     ).add_to(m)
- 
-    # MiniMap
-    MiniMap(toggle_display=True, position="bottomleft").add_to(m)
- 
-    # HeatMap (togglable layer, off by default)
-    heat_group = FeatureGroup(name="Density Heatmap", show=False)
-    HeatMap([[p["lat"], p["lon"]] for p in all_locs],
-            min_opacity=0.3, radius=20, blur=15,
-            gradient={0.2: "blue", 0.5: "lime", 0.8: "orange", 1.0: "red"}
-    ).add_to(heat_group)
-    heat_group.add_to(m)
- 
-    # Per-category clustered layers
-    layers = {}
-    for cat in CATEGORIES:
-        layers[cat["name"]] = MarkerCluster(name=cat["name"])
- 
-    for loc in all_locs:
+
+    # One FeatureGroup per category
+    groups = {cat: folium.FeatureGroup(name=cat.capitalize()) for cat in CATEGORY_COLORS}
+    for grp in groups.values():
+        grp.add_to(m)
+
+    # Heatmap data
+    heat_data = []
+
+    for obs in rows:
+        lat = obs["latitude_dd"]
+        lon = obs["longitude_dd"]
+        cat = obs.get("category", "insect")
+        color = CATEGORY_COLORS.get(cat, "#888")
+
+        heat_data.append([lat, lon])
+
+        marker = folium.CircleMarker(
+            location=[lat, lon],
+            radius=8,
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.8,
+            popup=folium.Popup(make_popup(obs), max_width=300),
+            tooltip=obs.get("common_name") or obs.get("picture_name") or "Unknown",
+        )
+        groups.get(cat, groups.get("insect")).add_child(marker)
+
+    # Heatmap layer
+    folium.plugins.HeatMap(heat_data, name="Heatmap", radius=20).add_to(m)
+
+    # Cluster layer (all categories combined)
+    cluster = folium.plugins.MarkerCluster(name="Clusters")
+    for obs in rows:
         folium.Marker(
-            location=[loc["lat"], loc["lon"]],
-            popup=build_popup(loc),
-            tooltip=f"{loc['category']} — {loc['species_name']}",
-            icon=folium.Icon(color=loc["color"], icon=loc["icon"], prefix="fa"),
-        ).add_to(layers[loc["category"]])
- 
-    for layer in layers.values():
-        layer.add_to(m)
- 
-    LayerControl(collapsed=False).add_to(m)
- 
-    m.save(OUTPUT_MAP)
-    print(f"[info] Map saved -> {OUTPUT_MAP}")
-    export_geojson(all_locs, OUTPUT_GEOJSON)
-    print("[info] All done.")
- 
- 
+            location=[obs["latitude_dd"], obs["longitude_dd"]],
+            popup=folium.Popup(make_popup(obs), max_width=300),
+            tooltip=obs.get("common_name") or obs.get("picture_name") or "Unknown",
+        ).add_to(cluster)
+    cluster.add_to(m)
+
+    folium.LayerControl(collapsed=False).add_to(m)
+    folium.plugins.MiniMap().add_to(m)
+    folium.plugins.Fullscreen().add_to(m)
+
+    m.save(str(OUTPUT_FILE))
+    log.info(f"Map saved → {OUTPUT_FILE}")
+
+
+def run():
+    if not DATABASE_URL:
+        log.error("❌ DATABASE_URL not set in .env")
+        return
+
+    rows = get_gps_observations()
+    log.info(f"Found {len(rows)} observations with GPS")
+
+    if not rows:
+        log.warning("No GPS observations found — map not generated.")
+        log.warning("Make sure you ran the pipeline first (extract.py).")
+        return
+
+    generate_map(rows)
+    log.info(f"✅ Map generated with {len(rows)} points → {OUTPUT_FILE.name}")
+
+
 if __name__ == "__main__":
-    main()
+    run()

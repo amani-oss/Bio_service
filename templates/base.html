@@ -659,12 +659,14 @@
         </a>
       </div>
 
+      {% if current_user.is_authenticated and current_user.is_admin %}
       <div class="nav-section">
         <div class="nav-label">Tools</div>
         <a href="/pipeline" class="nav-link {% if request.path == '/pipeline' %}active{% endif %}" onclick="closeSidebar()">
           <span class="nav-icon">▷</span> Pipeline
         </a>
       </div>
+      {% endif %}
 
       <div class="nav-section">
         <div class="nav-label">Categories</div>
@@ -677,6 +679,27 @@
     </nav>
 
     <div class="sidebar-footer">
+      {% if current_user.is_authenticated %}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;">
+        <div style="min-width:0">
+          <div style="font-size:0.75rem;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            {{ current_user.username }}
+          </div>
+          <div style="font-size:0.62rem;margin-top:2px;">
+            {% if current_user.is_admin %}
+            <span style="color:var(--amber);background:var(--amber-dim);border:1px solid #f59e0b33;border-radius:20px;padding:1px 7px;">Admin</span>
+            {% else %}
+            <span style="color:var(--text-3);">User</span>
+            {% endif %}
+          </div>
+        </div>
+        <a href="/logout" style="font-size:0.68rem;color:var(--text-3);text-decoration:none;padding:5px 10px;border:1px solid var(--border-dim);border-radius:var(--radius-sm);white-space:nowrap;transition:all 200ms;flex-shrink:0;"
+           onmouseover="this.style.color='var(--red)';this.style.borderColor='#f8717144';"
+           onmouseout="this.style.color='var(--text-3)';this.style.borderColor='var(--border-dim)';">
+          ⏻ Logout
+        </a>
+      </div>
+      {% endif %}
       <div class="version-tag">BioField v3.0 · 2026</div>
     </div>
   </aside>
@@ -719,9 +742,11 @@
       <a href="/map"         class="bottom-nav-item {% if request.path == '/map' %}active{% endif %}">
         <span class="bottom-nav-icon">◎</span> Map
       </a>
+      {% if current_user.is_authenticated and current_user.is_admin %}
       <a href="/pipeline"    class="bottom-nav-item {% if request.path == '/pipeline' %}active{% endif %}">
         <span class="bottom-nav-icon">▷</span> Pipeline
       </a>
+      {% endif %}
     </div>
   </nav>
 

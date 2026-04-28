@@ -23,6 +23,7 @@ import sys
 import threading
 import zipfile
 from collections import Counter, defaultdict
+from functools import wraps
 from pathlib import Path
 
 import cloudinary
@@ -30,8 +31,11 @@ import cloudinary.uploader
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
-from flask import (Flask, Response, jsonify, render_template,
-                   request, send_file, stream_with_context)
+from flask import (Flask, Response, abort, jsonify, redirect, render_template,
+                   request, send_file, stream_with_context, url_for)
+from flask_login import (LoginManager, UserMixin, current_user, login_required,
+                          login_user, logout_user)
+from werkzeug.security import check_password_hash, generate_password_hash
 
 load_dotenv()
 
@@ -42,6 +46,7 @@ logging.basicConfig(
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024   # 50 MB per upload
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "biofield-dev-secret-change-in-prod")
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -94,6 +99,15 @@ def init_db():
                     created_at        TIMESTAMP    DEFAULT NOW()
                 );
 
+                CREATE TABLE IF NOT EXISTS users (
+                    id            SERIAL PRIMARY KEY,
+                    username      VARCHAR(100) UNIQUE NOT NULL,
+                    email         VARCHAR(255) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    role          VARCHAR(20)  DEFAULT 'user',
+                    created_at    TIMESTAMP    DEFAULT NOW()
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_obs_category
                     ON observations(category);
                 CREATE INDEX IF NOT EXISTS idx_obs_status
@@ -101,6 +115,89 @@ def init_db():
             """)
         conn.commit()
     app.logger.info("Database initialised.")
+
+
+def seed_admin():
+    """Create the admin user from env vars if it doesn't exist yet."""
+    username = os.environ.get("ADMIN_USERNAME", "admin")
+    email    = os.environ.get("ADMIN_EMAIL",    "admin@biofield.local")
+    password = os.environ.get("ADMIN_PASSWORD", "")
+
+    if not password:
+        app.logger.warning("ADMIN_PASSWORD not set — admin account not seeded.")
+        return
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+            if cur.fetchone():
+                return
+            cur.execute("""
+                INSERT INTO users (username, email, password_hash, role)
+                VALUES (%s, %s, %s, 'admin')
+            """, (username, email, generate_password_hash(password)))
+        conn.commit()
+    app.logger.info(f"Admin user '{username}' created.")
+
+
+# ── Auth ───────────────────────────────────────────────────────────────────────
+
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
+login_manager.login_message = ""
+
+
+class User(UserMixin):
+    def __init__(self, id, username, email, role):
+        self.id = id
+        self.username = username
+        self.email = email
+        self.role = role
+
+    @property
+    def is_admin(self):
+        return self.role == "admin"
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, username, email, role FROM users WHERE id = %s",
+                    (user_id,)
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        return User(*row)
+    except Exception:
+        return None
+
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    """Return JSON 401 for API calls, redirect to login for page requests."""
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Authentication required"}), 401
+    return redirect(url_for("login", next=request.url))
+
+
+def admin_required(f):
+    """Decorator: require admin role. Returns 403 JSON for API, redirects for pages."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Authentication required"}), 401
+            return redirect(url_for("login", next=request.url))
+        if not current_user.is_admin:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Admin access required"}), 403
+            return redirect(url_for("index"))
+        return f(*args, **kwargs)
+    return decorated
 
 
 # ── Data Helpers ───────────────────────────────────────────────────────────────
@@ -116,7 +213,6 @@ def get_all_observations(category: str = "all") -> list[dict]:
                     (category,)
                 )
             rows = cur.fetchall()
-    # Convert RealDictRow → plain dict, add _category alias for templates
     result = []
     for r in rows:
         d = dict(r)
@@ -130,7 +226,6 @@ def get_stats() -> dict:
 
     with get_db() as conn:
         with conn.cursor() as cur:
-            # Per-category totals
             cur.execute("""
                 SELECT category,
                        COUNT(*)                                          AS total,
@@ -145,7 +240,7 @@ def get_stats() -> dict:
                 stats["categories"][cat] = {
                     "total":          total,
                     "with_gps":       gps,
-                    "images_on_disk": imgs,   # reuse field name so templates work unchanged
+                    "images_on_disk": imgs,
                     "label": CATEGORIES.get(cat, {}).get("label", cat),
                     "color": CATEGORIES.get(cat, {}).get("color", "#888"),
                     "icon":  CATEGORIES.get(cat, {}).get("icon",  "?"),
@@ -153,7 +248,6 @@ def get_stats() -> dict:
                 stats["total"]    += total
                 stats["with_gps"] += gps
 
-            # Ensure all categories exist even if empty
             for cat, cfg in CATEGORIES.items():
                 if cat not in stats["categories"]:
                     stats["categories"][cat] = {
@@ -161,12 +255,9 @@ def get_stats() -> dict:
                         "label": cfg["label"], "color": cfg["color"], "icon": cfg["icon"],
                     }
 
-            # Processed count
             cur.execute("SELECT COUNT(*) FROM observations WHERE processing_status = 'SUCCESS'")
             stats["db_processed"] = cur.fetchone()[0]
 
-    # Map file no longer stored locally on Render; mark as not available by default.
-    # (map.py can upload the generated HTML to Cloudinary or store as a DB record too)
     stats["map_exists"]     = (BASE_DIR / "bio_observations_map.html").exists()
     stats["geojson_exists"] = (BASE_DIR / "bio_observations.geojson").exists()
     return stats
@@ -252,7 +343,7 @@ _log_queues: dict[str, queue.Queue] = {}
 def _stream_subprocess(cmd: list[str], stream_id: str):
     q = _log_queues[stream_id]
     try:
-        env = {**os.environ}   # pass all env vars (DATABASE_URL, CLOUDINARY_*, etc.)
+        env = {**os.environ}
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, bufsize=1, cwd=str(BASE_DIR), env=env)
         for line in proc.stdout:
@@ -287,14 +378,89 @@ def inject_globals():
     return {"categories": CATEGORIES}
 
 
+# ── Auth Routes ────────────────────────────────────────────────────────────────
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, username, email, role, password_hash FROM users WHERE username = %s",
+                    (username,)
+                )
+                row = cur.fetchone()
+        if row and check_password_hash(row[4], password):
+            user = User(row[0], row[1], row[2], row[3])
+            login_user(user, remember=True)
+            next_page = request.args.get("next", "")
+            if not next_page or not next_page.startswith("/"):
+                next_page = url_for("index")
+            return redirect(next_page)
+        error = "Invalid username or password."
+
+    return render_template("login.html", error=error)
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email    = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        confirm  = request.form.get("confirm", "")
+
+        if not username or not email or not password:
+            error = "All fields are required."
+        elif len(password) < 6:
+            error = "Password must be at least 6 characters."
+        elif password != confirm:
+            error = "Passwords do not match."
+        else:
+            try:
+                with get_db() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            INSERT INTO users (username, email, password_hash, role)
+                            VALUES (%s, %s, %s, 'user')
+                        """, (username, email, generate_password_hash(password)))
+                    conn.commit()
+                return redirect(url_for("login"))
+            except psycopg2.IntegrityError:
+                error = "Username or email already taken."
+            except Exception as e:
+                error = f"Registration failed: {e}"
+
+    return render_template("register.html", error=error)
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("login"))
+
+
 # ── Page Routes ────────────────────────────────────────────────────────────────
 
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html", stats=get_stats(), recent=get_recent_observations(8))
 
 
 @app.route("/observations")
+@login_required
 def observations():
     cat_filter = request.args.get("category", "all")
     all_obs    = get_all_observations(cat_filter)
@@ -304,6 +470,7 @@ def observations():
 
 @app.route("/map")
 def map_view():
+    """Public — accessible without login."""
     map_file = BASE_DIR / "bio_observations_map.html"
     geo_file = BASE_DIR / "bio_observations.geojson"
     return render_template("map_view.html",
@@ -313,6 +480,7 @@ def map_view():
 
 @app.route("/map-content")
 def map_content():
+    """Public — serves the Folium HTML file."""
     map_file = BASE_DIR / "bio_observations_map.html"
     if not map_file.exists():
         return "Map not generated yet.", 404
@@ -320,11 +488,13 @@ def map_content():
 
 
 @app.route("/analytics")
+@login_required
 def analytics():
     return render_template("analytics.html", data=get_analytics_data())
 
 
 @app.route("/upload")
+@login_required
 def upload_page():
     stats = get_stats()
     cats_with_counts = {}
@@ -336,6 +506,7 @@ def upload_page():
 
 
 @app.route("/pipeline")
+@admin_required
 def pipeline():
     api_key_set = bool(os.environ.get("OPENROUTER_API_KEY", "").strip())
     return render_template("pipeline.html", stats=get_stats(), api_key_set=api_key_set)
@@ -344,11 +515,13 @@ def pipeline():
 # ── Data API ───────────────────────────────────────────────────────────────────
 
 @app.route("/api/stats")
+@login_required
 def api_stats():
     return jsonify(get_stats())
 
 
 @app.route("/api/analytics")
+@login_required
 def api_analytics():
     return jsonify(get_analytics_data())
 
@@ -357,6 +530,7 @@ def api_analytics():
 
 @app.route("/api/geojson")
 def api_geojson():
+    """Public — used by the map iframe."""
     rows = get_all_observations()
     features = []
     for r in rows:
@@ -388,13 +562,13 @@ def api_geojson():
 
 
 @app.route("/api/export-csv")
+@login_required
 def api_export_csv():
     cat_filter = request.args.get("category", "all")
     rows = get_all_observations(cat_filter)
     if not rows:
         return jsonify({"error": "No data"}), 404
 
-    # Exclude internal fields
     skip = {"_category", "id"}
     fieldnames = [k for k in rows[0].keys() if k not in skip]
 
@@ -409,6 +583,7 @@ def api_export_csv():
 
 
 @app.route("/api/export-excel")
+@login_required
 def api_export_excel():
     try:
         import openpyxl
@@ -457,12 +632,11 @@ def api_export_excel():
 
 
 @app.route("/api/backup")
+@login_required
 def api_backup():
-    """Export all observations as a CSV + GeoJSON ZIP (no local DB to back up)."""
     rows = get_all_observations()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        # CSV per category
         for cat in CATEGORIES:
             cat_rows = [r for r in rows if r["_category"] == cat]
             if cat_rows:
@@ -477,11 +651,11 @@ def api_backup():
                      mimetype="application/zip")
 
 
-# ── Image API — now just redirects to Cloudinary URL ──────────────────────────
+# ── Image API ──────────────────────────────────────────────────────────────────
 
 @app.route("/api/image-url/<int:obs_id>")
+@login_required
 def api_image_url(obs_id: int):
-    """Return the Cloudinary URL for a given observation id."""
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT cloudinary_url FROM observations WHERE id = %s", (obs_id,))
@@ -491,9 +665,10 @@ def api_image_url(obs_id: int):
     return jsonify({"url": row[0]})
 
 
-# ── Upload API — saves to Cloudinary, inserts row in PostgreSQL ────────────────
+# ── Upload API ─────────────────────────────────────────────────────────────────
 
 @app.route("/api/upload", methods=["POST"])
+@login_required
 def api_upload():
     app.logger.info("Upload request received")
     category = request.form.get("category", "unsorted")
@@ -519,7 +694,6 @@ def api_upload():
                         skipped.append(f.filename)
                         continue
 
-                    # Upload to Cloudinary
                     result = cloudinary.uploader.upload(
                         f,
                         folder=f"biofield/{category}",
@@ -529,7 +703,6 @@ def api_upload():
                     public_id = result["public_id"]
                     app.logger.info(f"Cloudinary OK: {url}")
 
-                    # Insert a PENDING row in PostgreSQL
                     cur.execute("""
                         INSERT INTO observations
                             (category, picture_name, cloudinary_url,
@@ -556,9 +729,71 @@ def api_upload():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# ── Admin: Delete / Update observation ────────────────────────────────────────
+
+@app.route("/api/observations/<int:obs_id>", methods=["DELETE"])
+@admin_required
+def api_delete_observation(obs_id: int):
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT cloudinary_public_id FROM observations WHERE id = %s",
+                    (obs_id,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    return jsonify({"error": "Not found"}), 404
+                public_id = row[0]
+                cur.execute("DELETE FROM observations WHERE id = %s", (obs_id,))
+            conn.commit()
+
+        if public_id:
+            try:
+                cloudinary.uploader.destroy(public_id)
+            except Exception as e:
+                app.logger.warning(f"Cloudinary delete failed for {public_id}: {e}")
+
+        return jsonify({"status": "deleted", "id": obs_id})
+    except Exception as e:
+        app.logger.error(f"Delete failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/observations/<int:obs_id>", methods=["PATCH"])
+@admin_required
+def api_update_observation(obs_id: int):
+    data = request.get_json(silent=True) or {}
+    allowed_fields = {
+        "common_name", "scientific_name", "species_name", "category",
+        "date", "gps_string", "latitude_dd", "longitude_dd",
+        "altitude_m", "processing_status",
+    }
+    updates = {k: v for k, v in data.items() if k in allowed_fields}
+    if not updates:
+        return jsonify({"error": "No valid fields to update"}), 400
+
+    set_clause = ", ".join(f"{k} = %s" for k in updates)
+    values     = list(updates.values()) + [obs_id]
+
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE observations SET {set_clause} WHERE id = %s",
+                    values
+                )
+            conn.commit()
+        return jsonify({"status": "updated", "id": obs_id})
+    except Exception as e:
+        app.logger.error(f"Update failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Pipeline API ───────────────────────────────────────────────────────────────
 
 @app.route("/api/run-extract", methods=["POST"])
+@admin_required
 def api_run_extract():
     import uuid
     sid = str(uuid.uuid4())
@@ -570,6 +805,7 @@ def api_run_extract():
 
 
 @app.route("/api/run-map", methods=["POST"])
+@admin_required
 def api_run_map():
     import uuid
     sid = str(uuid.uuid4())
@@ -581,6 +817,7 @@ def api_run_map():
 
 
 @app.route("/api/logs/<stream_id>")
+@admin_required
 def api_logs(stream_id: str):
     return Response(stream_with_context(sse_generator(stream_id)),
                     mimetype="text/event-stream",
@@ -592,6 +829,7 @@ def api_logs(stream_id: str):
 with app.app_context():
     try:
         init_db()
+        seed_admin()
     except Exception as e:
         app.logger.warning(f"DB init skipped (no DATABASE_URL?): {e}")
 

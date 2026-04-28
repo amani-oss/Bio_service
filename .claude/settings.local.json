@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/pip install *)",
+      "Bash(python -m pip install flask-login)",
+      "Bash(python -c \"from flask_login import LoginManager; print\\('OK'\\)\")"
+    ]
+  }
+}

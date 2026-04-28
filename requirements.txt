@@ -1,5 +1,6 @@
 flask>=3.0
 python-dotenv>=1.0
+flask-login>=0.6
 
 # Cloud storage & database
 cloudinary>=1.40

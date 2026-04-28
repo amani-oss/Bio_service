@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BioField — Create Account</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg-0:      #080c0a;
+      --bg-1:      #0f1610;
+      --bg-2:      #161f17;
+      --bg-card:   #131a14;
+      --border-dim:#1f2e20;
+      --border:    #2a3d2c;
+      --text-0:    #e8f0e9;
+      --text-1:    #a8bfaa;
+      --text-2:    #6b8a6d;
+      --text-3:    #3d5a3f;
+      --green:     #4ade80;
+      --green-dim: #4ade8022;
+      --red:       #f87171;
+      --font-serif:'Libre Baskerville', Georgia, serif;
+      --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --transition:200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+
+    body {
+      font-family: var(--font-mono);
+      background: var(--bg-0);
+      color: var(--text-0);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    .auth-wrap { width: 100%; max-width: 400px; }
+
+    .auth-brand {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .auth-brand-icon {
+      font-size: 2.4rem;
+      display: block;
+      margin-bottom: 8px;
+      filter: drop-shadow(0 0 14px #4ade8055);
+    }
+    .auth-brand-title {
+      font-family: var(--font-serif);
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-0);
+      letter-spacing: -0.02em;
+    }
+    .auth-brand-sub {
+      font-size: 0.63rem;
+      color: var(--text-2);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    .auth-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+    }
+
+    .auth-card-title {
+      font-family: var(--font-serif);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-0);
+      margin-bottom: 6px;
+    }
+    .auth-card-sub {
+      font-size: 0.73rem;
+      color: var(--text-2);
+      margin-bottom: 24px;
+    }
+
+    .field { margin-bottom: 15px; }
+
+    .field label {
+      display: block;
+      font-size: 0.63rem;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--text-2);
+      margin-bottom: 7px;
+    }
+
+    .field input {
+      width: 100%;
+      background: var(--bg-2);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-sm);
+      padding: 11px 14px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--text-0);
+      outline: none;
+      transition: border-color var(--transition);
+      min-height: 44px;
+    }
+    .field input:focus  { border-color: var(--green); }
+    .field input::placeholder { color: var(--text-3); }
+
+    .field-hint {
+      font-size: 0.65rem;
+      color: var(--text-3);
+      margin-top: 5px;
+    }
+
+    .error-box {
+      background: #f8717111;
+      border: 1px solid #f8717133;
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: 0.76rem;
+      color: var(--red);
+      margin-bottom: 18px;
+    }
+
+    .btn-submit {
+      width: 100%;
+      padding: 13px;
+      min-height: 48px;
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid #4ade8044;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition);
+      letter-spacing: 0.04em;
+      margin-top: 8px;
+    }
+    .btn-submit:hover {
+      background: #4ade8030;
+      border-color: var(--green);
+      box-shadow: 0 0 20px #4ade8022;
+    }
+
+    .auth-footer {
+      margin-top: 22px;
+      text-align: center;
+    }
+    .auth-footer a {
+      font-size: 0.75rem;
+      color: var(--text-2);
+      text-decoration: none;
+      transition: color var(--transition);
+    }
+    .auth-footer a:hover { color: var(--green); }
+
+    .role-notice {
+      background: var(--bg-2);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: 0.72rem;
+      color: var(--text-2);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .role-notice strong { color: var(--text-1); }
+  </style>
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-brand">
+    <span class="auth-brand-icon">🌿</span>
+    <div class="auth-brand-title">BioField</div>
+    <div class="auth-brand-sub">Observation Dashboard</div>
+  </div>
+
+  <div class="auth-card">
+    <div class="auth-card-title">Create account</div>
+    <div class="auth-card-sub">Join BioField to upload and browse observations.</div>
+
+    <div class="role-notice">
+      New accounts have <strong>user</strong> access — browse all data and upload images.
+      The map is always public and requires no account.
+    </div>
+
+    {% if error %}
+    <div class="error-box">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username"
+               placeholder="choose a username"
+               autocomplete="username" required autofocus
+               minlength="2" maxlength="50" />
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email"
+               placeholder="your@email.com"
+               autocomplete="email" required />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password"
+               placeholder="at least 6 characters"
+               autocomplete="new-password" required minlength="6" />
+        <div class="field-hint">Minimum 6 characters</div>
+      </div>
+      <div class="field">
+        <label for="confirm">Confirm Password</label>
+        <input type="password" id="confirm" name="confirm"
+               placeholder="repeat your password"
+               autocomplete="new-password" required minlength="6" />
+      </div>
+      <button type="submit" class="btn-submit">→ Create Account</button>
+    </form>
+
+    <div class="auth-footer">
+      <a href="/login">Already have an account? Sign in →</a>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

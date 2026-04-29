@@ -534,8 +534,8 @@
       const data = await res.json();
       fill.style.width = '100%';
 
-      if (data.error) {
-        showResult('error', 'Upload failed: ' + data.error);
+      if (data.status !== 'success') {
+        showResult('error', 'Upload failed: ' + (data.message || data.error || 'Unknown error'));
         for (const [, entry] of pendingFiles) {
           const item = document.getElementById('prev-' + entry.id);
           if (item) { item.classList.remove('uploading'); item.classList.add('error'); document.getElementById('status-' + entry.id).textContent = '✕'; }
@@ -547,7 +547,7 @@
           const item = document.getElementById('prev-' + entry.id);
           if (!item) continue;
           item.classList.remove('uploading');
-          const isSaved = saved.includes(entry.file.name);
+          const isSaved = saved.some(s => s.name === entry.file.name);
           item.classList.add(isSaved ? 'done' : 'error');
           document.getElementById('status-' + entry.id).textContent = isSaved ? '✓' : '✕';
         }

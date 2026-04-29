@@ -249,7 +249,7 @@ def run():
                 "common_name": None, "scientific_name": None, "species_name": None,
                 "date": None, "gps_string": "No GPS Data",
                 "latitude_dd": None, "longitude_dd": None, "altitude_m": None,
-                "processing_status": "EXIF_ERROR",
+                "processing_status": "EXIF_ERROR","ai_confidence":None,
             })
             continue
 
@@ -267,7 +267,7 @@ def run():
                 "common_name": None, "scientific_name": None, "species_name": None,
                 "date": None, "gps_string": "No GPS Data",
                 "latitude_dd": None, "longitude_dd": None, "altitude_m": None,
-                "processing_status": "DOWNLOAD_ERROR",
+                "processing_status": "DOWNLOAD_ERROR","ai_confidence":None,
             })
             consecutive_failures += 1
             continue
@@ -298,6 +298,7 @@ def run():
             "longitude_dd":    exif["longitude_dd"],
             "altitude_m":      exif["altitude_m"],
             "processing_status": status,
+            "ai_confidence":ai["ai_confidence"],
         })
 
         log.info(f"  ✅ Saved to DB — {status}")

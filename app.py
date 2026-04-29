@@ -77,44 +77,54 @@ def get_db():
 
 
 def init_db():
-    """Create tables if they don't exist yet. Called once at startup."""
-    with get_db() as conn:
+    """Create tables and indexes if they don't exist. Each statement runs separately."""
+    statements = [
+        """
+        CREATE TABLE IF NOT EXISTS observations (
+            id                SERIAL PRIMARY KEY,
+            category          VARCHAR(20)  NOT NULL,
+            picture_name      VARCHAR(255),
+            cloudinary_url    TEXT,
+            cloudinary_public_id VARCHAR(255),
+            common_name       VARCHAR(255),
+            scientific_name   VARCHAR(255),
+            species_name      VARCHAR(255),
+            date              VARCHAR(50),
+            gps_string        TEXT,
+            latitude_dd       DOUBLE PRECISION,
+            longitude_dd      DOUBLE PRECISION,
+            altitude_m        DOUBLE PRECISION,
+            processing_status VARCHAR(50)  DEFAULT 'PENDING',
+            created_at        TIMESTAMP    DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id            SERIAL PRIMARY KEY,
+            username      VARCHAR(100) UNIQUE NOT NULL,
+            email         VARCHAR(255) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            role          VARCHAR(20)  DEFAULT 'user',
+            created_at    TIMESTAMP    DEFAULT NOW()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_obs_category ON observations(category)",
+        "CREATE INDEX IF NOT EXISTS idx_obs_status   ON observations(processing_status)",
+        # Safe to run on existing deployments — adds column only if missing
+        "ALTER TABLE observations ADD COLUMN IF NOT EXISTS ai_confidence VARCHAR(20)",
+    ]
+    conn = get_db()
+    try:
         with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS observations (
-                    id                SERIAL PRIMARY KEY,
-                    category          VARCHAR(20)  NOT NULL,
-                    picture_name      VARCHAR(255),
-                    cloudinary_url    TEXT,
-                    cloudinary_public_id VARCHAR(255),
-                    common_name       VARCHAR(255),
-                    scientific_name   VARCHAR(255),
-                    species_name      VARCHAR(255),
-                    date              VARCHAR(50),
-                    gps_string        TEXT,
-                    latitude_dd       DOUBLE PRECISION,
-                    longitude_dd      DOUBLE PRECISION,
-                    altitude_m        DOUBLE PRECISION,
-                    processing_status VARCHAR(50)  DEFAULT 'PENDING',
-                    created_at        TIMESTAMP    DEFAULT NOW()
-                );
-
-                CREATE TABLE IF NOT EXISTS users (
-                    id            SERIAL PRIMARY KEY,
-                    username      VARCHAR(100) UNIQUE NOT NULL,
-                    email         VARCHAR(255) UNIQUE NOT NULL,
-                    password_hash VARCHAR(255) NOT NULL,
-                    role          VARCHAR(20)  DEFAULT 'user',
-                    created_at    TIMESTAMP    DEFAULT NOW()
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_obs_category
-                    ON observations(category);
-                CREATE INDEX IF NOT EXISTS idx_obs_status
-                    ON observations(processing_status);
-            """)
+            for sql in statements:
+                cur.execute(sql)
         conn.commit()
-    app.logger.info("Database initialised.")
+        app.logger.info("Database initialised.")
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def seed_admin():
@@ -376,6 +386,37 @@ def sse_generator(stream_id: str):
 @app.context_processor
 def inject_globals():
     return {"categories": CATEGORIES}
+
+
+# ── Setup / Migration (no login required, token-protected) ────────────────────
+
+@app.route("/api/setup")
+def api_setup():
+    """
+    One-time migration endpoint. Call with ?token=<SETUP_TOKEN> to create
+    missing tables and seed the admin. Safe to call multiple times.
+    """
+    token    = request.args.get("token", "")
+    expected = os.environ.get("SETUP_TOKEN", "")
+    if not expected:
+        return jsonify({"error": "SETUP_TOKEN env var not set on the server."}), 403
+    if token != expected:
+        return jsonify({"error": "Invalid token."}), 403
+
+    results = []
+    try:
+        init_db()
+        results.append("Tables created / verified.")
+    except Exception as e:
+        return jsonify({"error": f"init_db failed: {e}"}), 500
+
+    try:
+        seed_admin()
+        results.append("Admin user seeded (or already exists).")
+    except Exception as e:
+        results.append(f"seed_admin warning: {e}")
+
+    return jsonify({"status": "ok", "steps": results})
 
 
 # ── Auth Routes ────────────────────────────────────────────────────────────────
@@ -829,9 +870,12 @@ def api_logs(stream_id: str):
 with app.app_context():
     try:
         init_db()
+    except Exception as e:
+        app.logger.error(f"init_db FAILED: {e}")
+    try:
         seed_admin()
     except Exception as e:
-        app.logger.warning(f"DB init skipped (no DATABASE_URL?): {e}")
+        app.logger.error(f"seed_admin FAILED: {e}")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5050))

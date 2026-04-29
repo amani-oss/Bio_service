@@ -321,6 +321,15 @@
             {% set st = obs.get('processing_status','') %}
             <span class="status-dot {% if st=='SUCCESS' %}status-success{% elif st in ('AI_FAILED','EXIF_ERROR','CIRCUIT_BREAK') %}status-failed{% else %}status-partial{% endif %}"></span>
             <span style="font-size:0.65rem;color:var(--text-3);margin-left:4px">{{ st or '—' }}</span>
+            {% set conf = obs.get('ai_confidence','') %}
+            {% if conf %}
+            <span style="margin-left:6px;font-size:0.6rem;padding:1px 6px;border-radius:20px;
+              {% if conf == 'high' %}background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;
+              {% elif conf == 'medium' %}background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;
+              {% else %}background:#f8717122;color:#f87171;border:1px solid #f8717144;{% endif %}">
+              {{ conf }}
+            </span>
+            {% endif %}
           </td>
           {% if current_user.is_admin %}
           <td>

@@ -79,7 +79,8 @@ def update_observation(conn, obs_id: int, data: dict):
                 latitude_dd       = %(latitude_dd)s,
                 longitude_dd      = %(longitude_dd)s,
                 altitude_m        = %(altitude_m)s,
-                processing_status = %(processing_status)s
+                processing_status = %(processing_status)s,
+                ai_confidence     = %(ai_confidence)s
             WHERE id = %(id)s
         """, {**data, "id": obs_id})
     conn.commit()
@@ -202,6 +203,7 @@ Do not include any other text."""
                 "common_name":    data.get("common_name",    "Unknown"),
                 "scientific_name":data.get("scientific_name","Unknown"),
                 "species_name":   data.get("common_name",    "Unknown"),
+                "ai_confidence":  data.get("confidence",     "low"),
             }
 
         except Exception as e:
@@ -210,7 +212,7 @@ Do not include any other text."""
                 time.sleep(RETRY_DELAY)
 
     return {"common_name": "Unknown", "scientific_name": "Unknown",
-            "species_name": "Unknown"}
+            "species_name": "Unknown", "ai_confidence": None}
 
 
 # ── Main pipeline ──────────────────────────────────────────────────────────────
